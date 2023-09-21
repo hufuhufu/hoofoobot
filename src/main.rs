@@ -1,6 +1,6 @@
 use std::{collections::HashMap, sync::Mutex};
 
-use anyhow::Context as _;
+use anyhow::{anyhow, Context as _};
 use poise::serenity_prelude::{self as serenity, ChannelId, GuildId};
 use shuttle_poise::ShuttlePoise;
 use shuttle_secrets::SecretStore;
@@ -46,7 +46,14 @@ async fn poise(#[shuttle_secrets::Secrets] secret_store: SecretStore) -> Shuttle
     // Get the discord token set in `Secrets.toml`
     let discord_token = secret_store
         .get("DISCORD_TOKEN")
-        .context("'DISCORD_TOKEN' was not found")?;
+        .context("'DISCORD_TOKEN' was not found in Secrets.toml")?;
+    let dev_guild_id = secret_store
+        .get("DISCORD_GUILD_ID")
+        .context("'DISCORD_GUILD_ID' was not found in Secrets.toml.")?;
+    let Ok(dev_guild_id) = u64::from_str_radix(dev_guild_id.as_str(), 10) else {
+        return Err(anyhow!("Failed to parse DISCORD_GUILD_ID.").into());
+    };
+    let dev_guild_id = Box::new(GuildId(dev_guild_id));
 
     let framework = poise::Framework::builder()
         .options(poise::FrameworkOptions {
@@ -76,7 +83,12 @@ async fn poise(#[shuttle_secrets::Secrets] secret_store: SecretStore) -> Shuttle
         )
         .setup(|ctx, _ready, framework| {
             Box::pin(async move {
-                poise::builtins::register_globally(ctx, &framework.options().commands).await?;
+                poise::builtins::register_in_guild(
+                    ctx,
+                    &framework.options().commands,
+                    *dev_guild_id,
+                )
+                .await?;
 
                 let mut config = Config::default();
                 config.set_graveyard(692419154971459736.into());
