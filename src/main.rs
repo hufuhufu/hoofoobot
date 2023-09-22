@@ -57,7 +57,11 @@ async fn poise(#[shuttle_secrets::Secrets] secret_store: SecretStore) -> Shuttle
 
     let framework = poise::Framework::builder()
         .options(poise::FrameworkOptions {
-            commands: vec![commands::hello(), commands::graveyard()],
+            commands: vec![
+                commands::hello(),
+                commands::graveyard(),
+                commands::register(),
+            ],
             prefix_options: poise::PrefixFrameworkOptions {
                 prefix: Some("f:".into()),
                 additional_prefixes: vec![poise::Prefix::Literal("F:")],
