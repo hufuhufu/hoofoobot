@@ -1,7 +1,10 @@
 use std::{collections::HashMap, sync::Mutex};
 
 use anyhow::{anyhow, Context as _};
-use poise::serenity_prelude::{self as serenity, ChannelId, GuildId};
+use poise::{
+    serenity_prelude::{self as serenity, ChannelId, GuildId},
+    Event, FrameworkContext,
+};
 use shuttle_poise::ShuttlePoise;
 use shuttle_secrets::SecretStore;
 use tracing::info;
@@ -79,6 +82,9 @@ async fn poise(#[shuttle_secrets::Secrets] secret_store: SecretStore) -> Shuttle
                     info!("Executed command {}", name);
                 })
             },
+            event_handler: |ctx, event, _framework, _data| {
+                Box::pin(event_handler(ctx, event, _framework, _data))
+            },
             ..Default::default()
         })
         .token(discord_token)
@@ -108,4 +114,29 @@ async fn poise(#[shuttle_secrets::Secrets] secret_store: SecretStore) -> Shuttle
         .map_err(shuttle_runtime::CustomError::new)?;
 
     Ok(framework.into())
+}
+
+async fn event_handler(
+    ctx: &serenity::Context,
+    event: &Event<'_>,
+    _framework: FrameworkContext<'_, Data, Error>,
+    _data: &Data,
+) -> Result<(), Error> {
+    match event {
+        Event::Ready { data_about_bot } => {
+            info!("Bot is online as {}", data_about_bot.user.name);
+        }
+        Event::Message { new_message } => {
+            if new_message.author.bot {
+                return Ok(());
+            }
+            if new_message.content.to_lowercase().contains("lompat") {
+                new_message
+                    .reply(ctx, "https://tenor.com/view/kodok-acumalaka-gif-26159537")
+                    .await?;
+            }
+        }
+        _ => {}
+    }
+    Ok(())
 }
