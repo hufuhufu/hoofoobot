@@ -1,7 +1,8 @@
-use std::sync::Arc;
+use std::{collections::HashMap, sync::Arc, time::Instant};
 
 use anyhow::{anyhow, Context as _};
 use database::Redis;
+use humantime::format_duration;
 use poise::{
     serenity_prelude::{self as serenity, GuildId},
     Event, FrameworkContext,
@@ -11,9 +12,14 @@ use shuttle_secrets::SecretStore;
 use tokio::sync::Mutex;
 use tracing::info;
 
+use crate::score::{GuildUser, Scores};
+
 pub struct Data {
     db: Arc<Mutex<Redis>>,
+    voice_state: Arc<Mutex<VoiceState>>,
 }
+
+pub struct VoiceState(pub HashMap<GuildUser, Instant>);
 
 type Error = Box<dyn std::error::Error + Send + Sync>;
 type Context<'a> = poise::Context<'a, Data, Error>;
@@ -26,7 +32,7 @@ mod score;
 async fn poise(#[shuttle_secrets::Secrets] secret_store: SecretStore) -> ShuttlePoise<Data, Error> {
     // Get the discord token set in `Secrets.toml`
     let discord_token = secret_store
-        .get("DISCORD_TOKEN")
+        .get("DEV_DISCORD_TOKEN")
         .context("'DISCORD_TOKEN' was not found in Secrets.toml")?;
 
     // Get the development guild id in `Secrets.toml`
@@ -44,6 +50,7 @@ async fn poise(#[shuttle_secrets::Secrets] secret_store: SecretStore) -> Shuttle
         .context("'REDIS_URL' was not found in Secrets.toml.")?;
 
     let db = Arc::new(Mutex::new(Redis::new(redis_url)));
+    let voice_state = Arc::new(Mutex::new(VoiceState(HashMap::new())));
 
     let framework = poise::Framework::builder()
         .options(poise::FrameworkOptions {
@@ -70,8 +77,8 @@ async fn poise(#[shuttle_secrets::Secrets] secret_store: SecretStore) -> Shuttle
                     info!("Executed command {}", name);
                 })
             },
-            event_handler: |ctx, event, _framework, _data| {
-                Box::pin(event_handler(ctx, event, _framework, _data))
+            event_handler: |ctx, event, _framework, data| {
+                Box::pin(event_handler(ctx, event, _framework, data))
             },
             ..Default::default()
         })
@@ -88,7 +95,10 @@ async fn poise(#[shuttle_secrets::Secrets] secret_store: SecretStore) -> Shuttle
                 )
                 .await?;
 
-                Ok(Data { db: db.clone() })
+                Ok(Data {
+                    db: db.clone(),
+                    voice_state: voice_state.clone(),
+                })
             })
         })
         .build()
@@ -102,7 +112,7 @@ async fn event_handler(
     ctx: &serenity::Context,
     event: &Event<'_>,
     _framework: FrameworkContext<'_, Data, Error>,
-    _data: &Data,
+    data: &Data,
 ) -> Result<(), Error> {
     match event {
         Event::Ready { data_about_bot } => {
@@ -116,6 +126,45 @@ async fn event_handler(
                 new_message
                     .reply(ctx, "https://tenor.com/view/kodok-acumalaka-gif-26159537")
                     .await?;
+            }
+        }
+        Event::VoiceStateUpdate { old, new } => {
+            let now = Instant::now();
+            let Some(guild_id) = new.guild_id else {
+                return Ok(());
+            };
+            let user_id = new.user_id;
+
+            match old {
+                Some(_) => {
+                    if new.channel_id.is_some() {
+                        return Ok(());
+                    }
+
+                    let Some(then) = ({
+                        let voice_state = data.voice_state.lock().await;
+                        voice_state.0.get(&(guild_id, user_id).into()).copied()
+                    }) else {
+                        return Ok(());
+                    };
+                    let duration = now.duration_since(then);
+                    let guild_user = GuildUser(guild_id, user_id);
+
+                    Scores::incr_score(data.db.clone(), guild_user, duration.as_secs()).await?;
+
+                    println!(
+                        "User {} in guild {} left voice after being there for {}",
+                        user_id,
+                        guild_id,
+                        format_duration(duration)
+                    );
+                }
+                None => {
+                    let mut voice_state = data.voice_state.lock().await;
+                    voice_state.0.insert((guild_id, user_id).into(), now);
+
+                    println!("User {} in guild {} entered voice", user_id, guild_id);
+                }
             }
         }
         _ => {}

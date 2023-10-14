@@ -1,7 +1,7 @@
 use std::{sync::Arc, time::Duration};
 
 use anyhow::Result;
-use poise::serenity_prelude::{GuildId, Member, UserId};
+use poise::serenity_prelude::{GuildId, UserId};
 use redis::AsyncCommands;
 use tokio::sync::Mutex;
 
@@ -30,10 +30,10 @@ impl Scores {
         Ok(scores)
     }
 
-    pub async fn get_score(db: Arc<Mutex<Redis>>, member: Member) -> Result<Score> {
+    pub async fn get_score(db: Arc<Mutex<Redis>>, member: GuildUser) -> Result<Score> {
         let mut conn = Redis::get_connection(db).await?;
-        let guild_id = member.guild_id;
-        let user_id = member.user.id;
+        let guild_id = member.0;
+        let user_id = member.1;
 
         let score: u64 = conn
             .get(format!("score:{}:{}", guild_id.0, user_id.0))
@@ -43,10 +43,10 @@ impl Scores {
         Ok(Score::from((guild_id, user_id, score)))
     }
 
-    pub async fn incr_score(db: Arc<Mutex<Redis>>, member: &Member, delta: u64) -> Result<u64> {
+    pub async fn incr_score(db: Arc<Mutex<Redis>>, member: GuildUser, delta: u64) -> Result<u64> {
         let mut conn = Redis::get_connection(db).await?;
-        let guild_id = member.guild_id.0;
-        let user_id = member.user.id.0;
+        let guild_id = member.0;
+        let user_id = member.1;
 
         let after: u64 = conn
             .incr(format!("score:{guild_id}:{user_id}"), delta)
@@ -69,5 +69,14 @@ impl From<(GuildId, UserId, Duration)> for Score {
             user_id,
             score,
         }
+    }
+}
+
+#[derive(Clone, Copy, Debug, Default, Hash, PartialEq, Eq, PartialOrd, Ord)]
+pub struct GuildUser(pub GuildId, pub UserId);
+
+impl From<(GuildId, UserId)> for GuildUser {
+    fn from(value: (GuildId, UserId)) -> Self {
+        GuildUser(value.0, value.1)
     }
 }

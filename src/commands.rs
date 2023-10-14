@@ -2,7 +2,7 @@ use std::time::Duration;
 
 use poise::serenity_prelude::Member;
 
-use crate::{database::Configs, score::Scores, Context, Error};
+use crate::{database::Configs, score::{Scores, GuildUser}, Context, Error};
 
 /// Responds with "world!"
 #[poise::command(slash_command, prefix_command)]
@@ -58,8 +58,9 @@ pub async fn incr_score(
     let db = ctx.data().db.clone();
     let duration = humantime::parse_duration(&duration.as_str())?;
     let dur_secs = duration.as_secs();
+    let guild_user = GuildUser(member.guild_id, member.user.id);
 
-    let after = Scores::incr_score(db, &member, dur_secs).await?;
+    let after = Scores::incr_score(db, guild_user, dur_secs).await?;
     let after = Duration::from_secs(after);
 
     ctx.send(|reply| {
