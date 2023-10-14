@@ -1,10 +1,10 @@
 use std::{collections::HashMap, sync::Arc, time::Instant};
 
-use anyhow::{anyhow, Context as _};
+use anyhow::Context as _;
 use database::Redis;
 use humantime::format_duration;
 use poise::{
-    serenity_prelude::{self as serenity, GuildId},
+    serenity_prelude::{self as serenity},
     Event, FrameworkContext,
 };
 use shuttle_poise::ShuttlePoise;
@@ -34,15 +34,6 @@ async fn poise(#[shuttle_secrets::Secrets] secret_store: SecretStore) -> Shuttle
     let discord_token = secret_store
         .get("DISCORD_TOKEN")
         .context("'DISCORD_TOKEN' was not found in Secrets.toml")?;
-
-    // Get the development guild id in `Secrets.toml`
-    let dev_guild_id = secret_store
-        .get("DISCORD_GUILD_ID")
-        .context("'DISCORD_GUILD_ID' was not found in Secrets.toml.")?;
-    let Ok(dev_guild_id) = u64::from_str_radix(dev_guild_id.as_str(), 10) else {
-        return Err(anyhow!("Failed to parse DISCORD_GUILD_ID.").into());
-    };
-    let dev_guild_id = Box::new(GuildId(dev_guild_id));
 
     // Get the redis URL set in `Secrets.toml`
     let redis_url = secret_store
@@ -86,15 +77,8 @@ async fn poise(#[shuttle_secrets::Secrets] secret_store: SecretStore) -> Shuttle
         .intents(
             serenity::GatewayIntents::non_privileged() | serenity::GatewayIntents::MESSAGE_CONTENT,
         )
-        .setup(|ctx, _ready, framework| {
+        .setup(|_ctx, _ready, _framework| {
             Box::pin(async move {
-                poise::builtins::register_in_guild(
-                    ctx,
-                    &framework.options().commands,
-                    *dev_guild_id,
-                )
-                .await?;
-
                 Ok(Data {
                     db: db.clone(),
                     voice_state: voice_state.clone(),
