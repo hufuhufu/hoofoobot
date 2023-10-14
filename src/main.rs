@@ -152,7 +152,7 @@ async fn event_handler(
 
                     Scores::incr_score(data.db.clone(), guild_user, duration.as_secs()).await?;
 
-                    println!(
+                    info!(
                         "User {} in guild {} left voice after being there for {}",
                         user_id,
                         guild_id,
@@ -163,7 +163,7 @@ async fn event_handler(
                     let mut voice_state = data.voice_state.lock().await;
                     voice_state.0.insert((guild_id, user_id).into(), now);
 
-                    println!("User {} in guild {} entered voice", user_id, guild_id);
+                    info!("User {} in guild {} entered voice", user_id, guild_id);
                 }
             }
         }
