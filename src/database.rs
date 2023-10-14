@@ -26,6 +26,17 @@ impl Redis {
     }
 }
 
+pub struct Users {}
+
+impl Users {
+    pub async fn get_users(db: Arc<Mutex<Redis>>, guild_id: GuildId) -> Result<Vec<UserId>> {
+        let mut conn = Redis::get_connection(db).await?;
+        let users: Vec<u64> = conn.smembers(format!("users:{guild_id}")).await?;
+        let users: Vec<UserId> = users.into_iter().map(|u| UserId(u)).collect();
+
+        Ok(users)
+    }
+}
 
 pub struct Configs {}
 

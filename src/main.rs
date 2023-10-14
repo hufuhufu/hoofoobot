@@ -20,6 +20,7 @@ type Context<'a> = poise::Context<'a, Data, Error>;
 
 mod commands;
 mod database;
+mod score;
 
 #[shuttle_runtime::main]
 async fn poise(#[shuttle_secrets::Secrets] secret_store: SecretStore) -> ShuttlePoise<Data, Error> {
@@ -50,6 +51,7 @@ async fn poise(#[shuttle_secrets::Secrets] secret_store: SecretStore) -> Shuttle
                 commands::hello(),
                 commands::graveyard(),
                 commands::register(),
+                commands::incr_score(),
             ],
             prefix_options: poise::PrefixFrameworkOptions {
                 prefix: Some("f:".into()),
