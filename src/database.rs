@@ -46,11 +46,28 @@ impl Configs {
         let config: Config = conn.hgetall(format!("config:{guild_id}")).await?;
         Ok(config)
     }
+
+    pub async fn set_afk_channel(
+        db: Arc<Mutex<Redis>>,
+        guild_id: GuildId,
+        afk_channel_id: ChannelId,
+    ) -> Result<()> {
+        let mut conn = Redis::get_connection(db).await?;
+        conn.hset(
+            format!("config:{}", guild_id.0),
+            "afk_channel",
+            afk_channel_id.0,
+        )
+        .await?;
+
+        Ok(())
+    }
 }
 
 #[derive(Debug, Default)]
 pub struct Config {
     pub graveyard: Option<ChannelId>,
+    pub afk_channel: Option<ChannelId>,
 }
 
 impl FromRedisValue for Config {
@@ -78,4 +95,3 @@ impl FromRedisValue for Config {
         }
     }
 }
-

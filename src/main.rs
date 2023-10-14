@@ -50,6 +50,7 @@ async fn poise(#[shuttle_secrets::Secrets] secret_store: SecretStore) -> Shuttle
                 commands::graveyard(),
                 commands::register(),
                 commands::incr_score(),
+                commands::set_afk_channel(),
             ],
             prefix_options: poise::PrefixFrameworkOptions {
                 prefix: Some("f:".into()),
