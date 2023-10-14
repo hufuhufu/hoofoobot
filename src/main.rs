@@ -32,7 +32,7 @@ mod score;
 async fn poise(#[shuttle_secrets::Secrets] secret_store: SecretStore) -> ShuttlePoise<Data, Error> {
     // Get the discord token set in `Secrets.toml`
     let discord_token = secret_store
-        .get("DEV_DISCORD_TOKEN")
+        .get("DISCORD_TOKEN")
         .context("'DISCORD_TOKEN' was not found in Secrets.toml")?;
 
     // Get the development guild id in `Secrets.toml`
