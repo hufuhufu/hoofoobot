@@ -18,15 +18,13 @@ pub async fn hello(ctx: Context<'_>) -> Result<(), Error> {
 /// Move this channel to graveyard.
 #[poise::command(slash_command, prefix_command, guild_only)]
 pub async fn graveyard(ctx: Context<'_>) -> Result<(), Error> {
-    let data = ctx.data();
-    let db = data.db.clone();
     let channel_id = ctx.channel_id();
 
     let Some(guild_id) = ctx.guild_id() else {
         ctx.say("You need to run this command in a guild!").await?;
         return Ok(());
     };
-    let config = Configs::get_guild_config(db, guild_id).await?;
+    let config = Configs::get_guild_config(ctx.data(), guild_id).await?;
     match config.graveyard {
         Some(graveyard_id) => {
             channel_id.edit(ctx, |c| c.category(graveyard_id)).await?;
@@ -88,10 +86,9 @@ pub async fn set_afk_channel(
     ctx: Context<'_>,
     #[description = "AFK channel"] #[rename = "channel"] afk_channel_id: ChannelId,
 ) -> Result<(), Error> {
-    let db = ctx.data().db.clone();
     let guild_id = ctx.guild_id().unwrap();
     
-    Configs::set_afk_channel(db, guild_id, afk_channel_id).await?;
+    Configs::set_afk_channel(ctx.data(), guild_id, afk_channel_id).await?;
 
     Ok(())
 }

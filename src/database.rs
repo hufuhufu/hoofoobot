@@ -5,6 +5,8 @@ use poise::serenity_prelude::{ChannelId, GuildId, UserId};
 use redis::{aio::Connection, from_redis_value as from_val, AsyncCommands, Client, FromRedisValue};
 use tokio::sync::Mutex;
 
+use crate::Data;
+
 pub struct Redis {
     client: Client,
 }
@@ -41,17 +43,28 @@ impl Users {
 pub struct Configs {}
 
 impl Configs {
-    pub async fn get_guild_config(db: Arc<Mutex<Redis>>, guild_id: GuildId) -> Result<Config> {
+    pub async fn get_guild_config(data: &Data, guild_id: GuildId) -> Result<Config> {
+        let db = data.db.clone();
+        let cache = data.cache.clone();
+
         let mut conn = Redis::get_connection(db).await?;
         let config: Config = conn.hgetall(format!("config:{guild_id}")).await?;
+        {
+            let mut cache = cache.lock().await;
+            cache.insert_config(guild_id, config);
+        }
+
         Ok(config)
     }
 
     pub async fn set_afk_channel(
-        db: Arc<Mutex<Redis>>,
+        data: &Data,
         guild_id: GuildId,
         afk_channel_id: ChannelId,
     ) -> Result<()> {
+        let db = data.db.clone();
+        let cache = data.cache.clone();
+
         let mut conn = Redis::get_connection(db).await?;
         conn.hset(
             format!("config:{}", guild_id.0),
@@ -59,12 +72,23 @@ impl Configs {
             afk_channel_id.0,
         )
         .await?;
+        {
+            let mut cache = cache.lock().await;
+            match cache.get_mut_config(guild_id) {
+                Some(config) => config.afk_channel = Some(afk_channel_id),
+                None => {
+                    let mut config = Config::default();
+                    config.afk_channel = Some(afk_channel_id);
+                    cache.insert_config(guild_id, config);
+                }
+            };
+        }
 
         Ok(())
     }
 }
 
-#[derive(Debug, Default)]
+#[derive(Debug, Default, Clone, Copy)]
 pub struct Config {
     pub graveyard: Option<ChannelId>,
     pub afk_channel: Option<ChannelId>,

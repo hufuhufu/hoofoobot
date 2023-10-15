@@ -1,6 +1,7 @@
 use std::{collections::HashMap, sync::Arc, time::Instant};
 
 use anyhow::Context as _;
+use cache::DataCache;
 use database::Redis;
 use humantime::format_duration;
 use poise::{
@@ -17,6 +18,7 @@ use crate::score::{GuildUser, Scores};
 pub struct Data {
     db: Arc<Mutex<Redis>>,
     voice_state: Arc<Mutex<VoiceState>>,
+    cache: Arc<Mutex<DataCache>>,
 }
 
 pub struct VoiceState(pub HashMap<GuildUser, Instant>);
@@ -24,6 +26,7 @@ pub struct VoiceState(pub HashMap<GuildUser, Instant>);
 type Error = Box<dyn std::error::Error + Send + Sync>;
 type Context<'a> = poise::Context<'a, Data, Error>;
 
+mod cache;
 mod commands;
 mod database;
 mod score;
@@ -42,6 +45,7 @@ async fn poise(#[shuttle_secrets::Secrets] secret_store: SecretStore) -> Shuttle
 
     let db = Arc::new(Mutex::new(Redis::new(redis_url)));
     let voice_state = Arc::new(Mutex::new(VoiceState(HashMap::new())));
+    let data_cache = Arc::new(Mutex::new(DataCache::default()));
 
     let framework = poise::Framework::builder()
         .options(poise::FrameworkOptions {
@@ -83,6 +87,7 @@ async fn poise(#[shuttle_secrets::Secrets] secret_store: SecretStore) -> Shuttle
                 Ok(Data {
                     db: db.clone(),
                     voice_state: voice_state.clone(),
+                    cache: data_cache.clone(),
                 })
             })
         })
