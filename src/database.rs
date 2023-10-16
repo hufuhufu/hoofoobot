@@ -110,6 +110,7 @@ impl FromRedisValue for Config {
                 for (k, v) in conf_map {
                     match from_val::<String>(k)?.as_str() {
                         "graveyard" => conf.graveyard = Some(ChannelId(from_val(v)?)),
+                        "afk_channel" => conf.afk_channel = Some(ChannelId(from_val(v)?)),
                         _ => println!("Unknown field {:#?} = {:#?}", k, v),
                     }
                 }
