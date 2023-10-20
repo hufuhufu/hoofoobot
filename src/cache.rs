@@ -4,7 +4,7 @@ use poise::serenity_prelude::GuildId;
 
 use crate::database::Config;
 
-#[derive(Default)]
+#[derive(Debug, Default)]
 pub struct DataCache {
     configs: HashMap<GuildId, Config>,
 }

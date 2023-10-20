@@ -7,6 +7,7 @@ use tokio::sync::Mutex;
 
 use crate::Data;
 
+#[derive(Debug)]
 pub struct Redis {
     client: Client,
 }
