@@ -1,36 +1,75 @@
 use std::{sync::Arc, time::Duration};
 
-use anyhow::Result;
+use anyhow::{Error, Result};
+use futures_util::future::join_all;
 use poise::serenity_prelude::{GuildId, UserId};
 use redis::AsyncCommands;
 use tokio::sync::Mutex;
+use tracing::error;
 
-use crate::database::{Redis, Users};
+use crate::{database::Redis, Context};
 
 pub struct Scores {}
 
 impl Scores {
-    pub async fn get_all_score(db: Arc<Mutex<Redis>>, guild_id: GuildId) -> Result<Vec<Score>> {
-        let users = Users::get_users(db.clone(), guild_id).await?;
-        let score_keys = users.iter().fold("MGET ".to_owned(), |mut acc, user_id| {
-            let key = format!("score:{guild_id}:{user_id} ");
-            acc.push_str(&key);
-            acc
+    pub async fn get_all_score(ctx: Context<'_>, guild_id: GuildId) -> Result<Arc<[Score]>> {
+        let db = ctx.data().db.clone();
+        let db1 = db.clone();
+
+        let (tx, mut rx) = tokio::sync::mpsc::channel::<String>(10);
+
+        tokio::spawn(async move {
+            let mut conn = Redis::get_connection(db1).await?;
+
+            let mut score_keys = conn
+                .scan_match::<_, String>(format!("score:{}:*", guild_id.0))
+                .await?;
+
+            while let Some(score_key) = score_keys.next_item().await {
+                if let Err(e) = tx.send(score_key).await {
+                    error!(?e);
+                    return Ok::<(), Error>(());
+                }
+            }
+
+            Ok::<(), Error>(())
         });
 
-        let mut conn = Redis::get_connection(db).await?;
+        let mut handles = Vec::new();
 
-        let scores: Vec<u64> = conn.mget(score_keys).await?;
-        let scores: Vec<Score> = users
+        while let Some(score_key) = rx.recv().await {
+            let db = db.clone();
+            handles.push(tokio::spawn(async move {
+                let mut conn = Redis::get_connection(db.clone()).await?;
+                let score: u64 = conn.get(&score_key).await?;
+                let user_id = score_key.split(":").last().unwrap().parse::<u64>()?;
+
+                Ok::<_, Error>(Score {
+                    guild_id,
+                    user_id: user_id.into(),
+                    score: Duration::from_secs(score),
+                })
+            }));
+        }
+
+        let scores = join_all(handles).await;
+
+        let mut scores = scores
             .into_iter()
-            .zip(scores)
-            .map(|(user_id, score)| Score::from((guild_id, user_id, Duration::from_secs(score))))
-            .collect();
+            .map(|score| Ok::<_, Error>(score??))
+            .collect::<Result<Vec<Score>, _>>()?;
+        scores.sort();
+        let scores: Arc<[Score]> = scores.into();
+
+        {
+            let mut cache = ctx.data().cache.lock().await;
+            cache.set_scores(guild_id, scores.clone());
+        };
 
         Ok(scores)
     }
 
-    pub async fn get_score(db: Arc<Mutex<Redis>>, member: GuildUser) -> Result<Score> {
+    pub async fn _get_score(db: Arc<Mutex<Redis>>, member: GuildUser) -> Result<Score> {
         let mut conn = Redis::get_connection(db).await?;
         let guild_id = member.0;
         let user_id = member.1;
@@ -55,11 +94,17 @@ impl Scores {
     }
 }
 
-#[derive(Debug, Eq, PartialEq, PartialOrd, Ord, Clone, Copy)]
+#[derive(Debug, Eq, PartialEq, Ord, Clone, Copy)]
 pub struct Score {
-    guild_id: GuildId,
-    user_id: UserId,
-    score: Duration,
+    pub guild_id: GuildId,
+    pub user_id: UserId,
+    pub score: Duration,
+}
+
+impl PartialOrd for Score {
+    fn partial_cmp(&self, other: &Self) -> Option<std::cmp::Ordering> {
+        self.score.partial_cmp(&other.score)
+    }
 }
 
 impl From<(GuildId, UserId, Duration)> for Score {

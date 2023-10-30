@@ -8,7 +8,7 @@ use poise::{
 use tracing::{info, warn};
 
 use crate::{
-    database::Configs,
+    config::Configs,
     score::{GuildUser, Scores},
     Data, Error,
 };

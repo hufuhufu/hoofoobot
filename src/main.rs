@@ -28,6 +28,7 @@ type Context<'a> = poise::Context<'a, Data, Error>;
 
 mod cache;
 mod commands;
+mod config;
 mod database;
 mod event;
 mod score;
@@ -56,6 +57,7 @@ async fn poise(#[shuttle_secrets::Secrets] secret_store: SecretStore) -> Shuttle
                 commands::register(),
                 commands::incr_score(),
                 commands::set_afk_channel(),
+                commands::rank(),
             ],
             prefix_options: poise::PrefixFrameworkOptions {
                 prefix: Some("f:".into()),
