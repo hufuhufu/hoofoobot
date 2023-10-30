@@ -6,6 +6,7 @@ use poise::serenity_prelude::{ChannelId, Member};
 use crate::{
     config::Configs,
     score::{GuildUser, Scores},
+    user::Username,
     Context, Error,
 };
 
@@ -133,7 +134,9 @@ pub async fn rank(ctx: Context<'_>) -> Result<(), Error> {
     for (i, score) in scores.iter().enumerate() {
         table.add_row([
             (i + 1).to_string(),
-            score.user_id.to_string(),
+            Username::from_user_id(ctx, score.user_id)
+                .await?
+                .to_string(),
             humantime::format_duration(score.score).to_string(),
         ]);
     }

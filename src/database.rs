@@ -1,12 +1,8 @@
 use std::sync::Arc;
 
 use anyhow::Result;
-use futures_util::StreamExt;
-use poise::serenity_prelude::{GuildId, UserId};
 use redis::{aio::Connection, Client};
 use tokio::sync::Mutex;
-
-use crate::Context;
 
 #[derive(Debug)]
 pub struct Redis {
@@ -27,20 +23,5 @@ impl Redis {
         };
 
         Ok(conn)
-    }
-}
-
-pub struct _Users {}
-
-impl _Users {
-    pub async fn _get_users(ctx: Context<'_>, guild_id: GuildId) -> Result<Vec<(UserId, String)>> {
-        let usernames = guild_id
-            .members_iter(&ctx)
-            .filter_map(|mem| async move { mem.ok() })
-            .map(|mem| (mem.user.id, mem.user.name))
-            .collect::<Vec<(UserId, String)>>()
-            .await;
-
-        Ok(usernames)
     }
 }

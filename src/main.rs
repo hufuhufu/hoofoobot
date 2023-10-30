@@ -32,6 +32,7 @@ mod config;
 mod database;
 mod event;
 mod score;
+mod user;
 
 #[shuttle_runtime::main]
 async fn poise(#[shuttle_secrets::Secrets] secret_store: SecretStore) -> ShuttlePoise<Data, Error> {
