@@ -58,7 +58,7 @@ impl Scores {
             .into_iter()
             .map(|score| Ok::<_, Error>(score??))
             .collect::<Result<Vec<Score>, _>>()?;
-        scores.sort_by(|a, b| b.cmp(a));
+        scores.sort_by(|a, b| b.partial_cmp(a).unwrap_or_else(|| b.cmp(a)));
         let scores: Arc<[Score]> = scores.into();
 
         {
