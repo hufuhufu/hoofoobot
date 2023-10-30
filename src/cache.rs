@@ -65,7 +65,7 @@ impl<T> Cache<T> {
     }
 
     fn is_expired(&self) -> bool {
-        self.timestamp.elapsed() < self.ttl
+        self.timestamp.elapsed() > self.ttl
     }
 }
 
