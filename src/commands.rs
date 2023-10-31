@@ -142,7 +142,10 @@ pub async fn rank(ctx: Context<'_>) -> Result<(), Error> {
     }
 
     ctx.say(format!(
-        "## Voice Chat Total Time Ranking\nTop global penghuni voice chat.```{}```",
+        "```md\n\
+        Voice Chat Total Time Ranking\n\
+        =============================\n\
+        > Top global penghuni voice chat.``````{}```",
         table.to_string()
     ))
     .await?;
