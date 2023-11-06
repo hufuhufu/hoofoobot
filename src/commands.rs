@@ -51,7 +51,7 @@ pub async fn register(ctx: Context<'_>) -> Result<(), Error> {
 }
 
 /// Increments a duration of time to a user's voice time. ex: incr_score @hufuhufu 1d 10h 20m 30s
-#[poise::command(slash_command, prefix_command, guild_only)]
+#[poise::command(slash_command, prefix_command, guild_only, owners_only)]
 pub async fn incr_score(
     ctx: Context<'_>,
     #[description = "User to increase"] member: Member,
