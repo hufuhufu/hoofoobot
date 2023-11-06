@@ -775,7 +775,6 @@ version = "0.1.0"
 dependencies = [
  "anyhow",
  "comfy-table 7.1.0",
- "futures-util",
  "humantime",
  "poise",
  "redis",
