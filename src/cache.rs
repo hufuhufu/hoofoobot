@@ -35,6 +35,10 @@ impl DataCache {
     pub fn get_scores(&self, guild_id: GuildId) -> Option<&Cache<Arc<[Score]>>> {
         self.scores.get(&guild_id)
     }
+
+    pub fn rem_scores(&mut self, guild_id: GuildId) -> Option<Cache<Arc<[Score]>>> {
+        self.scores.remove(&guild_id)
+    }
 }
 
 #[derive(Clone, Copy, Debug)]

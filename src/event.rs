@@ -136,6 +136,10 @@ async fn go_out(data: &Data, guild_id: GuildId, user_id: UserId, now: Instant) -
         let mut voice_state = data.voice_state.lock().await;
         voice_state.timestamps.insert(guild_user, None);
     }
+    {
+        let mut cache = data.cache.lock().await;
+        cache.rem_scores(guild_id);
+    }
 
     let fmt_duration = humantime::format_duration(duration);
     info!("Left voice after being there for {fmt_duration}");
