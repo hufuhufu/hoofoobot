@@ -80,6 +80,7 @@ async fn poise(#[shuttle_secrets::Secrets] secret_store: SecretStore) -> Shuttle
             event_handler: |ctx, event, _framework, data| {
                 Box::pin(event::event_handler(ctx, event, _framework, data))
             },
+            owners: HashSet::from([UserId(429661753362874402)]),
             ..Default::default()
         })
         .token(discord_token)
