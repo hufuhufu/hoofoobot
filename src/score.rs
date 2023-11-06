@@ -64,8 +64,9 @@ impl Scores {
         let guild_id = member.0;
         let user_id = member.1;
 
-        let after = redis::pipe()
+        let (after,) = redis::pipe()
             .sadd(format!("score:{guild_id}"), user_id.0)
+            .ignore()
             .incr(format!("score:{guild_id}:{user_id}"), delta)
             .query_async(&mut conn)
             .await?;
