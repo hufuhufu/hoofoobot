@@ -142,3 +142,15 @@ async fn go_out(data: &Data, guild_id: GuildId, user_id: UserId, now: Instant) -
 
     Ok(())
 }
+
+pub async fn go_out_and_in(
+    data: &Data,
+    guild_id: GuildId,
+    user_id: UserId,
+    now: Instant,
+) -> Result<()> {
+    go_out(data, guild_id, user_id, now).await?;
+    go_in(data, guild_id, user_id, now).await;
+
+    Ok(())
+}

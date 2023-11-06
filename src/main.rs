@@ -1,9 +1,13 @@
-use std::{collections::HashMap, sync::Arc, time::Instant};
+use std::{
+    collections::{HashMap, HashSet},
+    sync::Arc,
+    time::Instant,
+};
 
 use anyhow::Context as _;
 use cache::DataCache;
 use database::Redis;
-use poise::serenity_prelude::{self as serenity};
+use poise::serenity_prelude::{self as serenity, UserId};
 use shuttle_poise::ShuttlePoise;
 use shuttle_secrets::SecretStore;
 use tokio::sync::Mutex;
@@ -19,7 +23,7 @@ pub struct Data {
 }
 
 #[derive(Debug, Default)]
-pub struct VoiceStates{
+pub struct VoiceStates {
     pub timestamps: HashMap<GuildUser, Option<Instant>>,
 }
 
@@ -59,6 +63,7 @@ async fn poise(#[shuttle_secrets::Secrets] secret_store: SecretStore) -> Shuttle
                 commands::incr_score(),
                 commands::set_afk_channel(),
                 commands::rank(),
+                commands::gtfo(),
             ],
             prefix_options: poise::PrefixFrameworkOptions {
                 prefix: Some("f:".into()),

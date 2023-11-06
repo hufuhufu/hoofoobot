@@ -105,3 +105,9 @@ impl From<(GuildId, UserId)> for GuildUser {
         GuildUser(value.0, value.1)
     }
 }
+
+impl std::cmp::PartialEq<poise::serenity_prelude::Member> for GuildUser {
+    fn eq(&self, other: &poise::serenity_prelude::Member) -> bool {
+        self.0 == other.guild_id && self.1 == other.user.id
+    }
+}
