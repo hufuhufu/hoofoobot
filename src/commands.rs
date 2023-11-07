@@ -1,7 +1,10 @@
-use std::time::{Duration, Instant};
+use std::{
+    sync::Arc,
+    time::{Duration, Instant},
+};
 
 use comfy_table::{modifiers::UTF8_ROUND_CORNERS, presets::UTF8_FULL_CONDENSED, Table};
-use poise::serenity_prelude::{ChannelId, GuildChannel, GuildId, Member};
+use poise::serenity_prelude::{Cache, ChannelId, GuildChannel, GuildId, Http, Member};
 use tokio::task::JoinSet;
 
 use crate::{
@@ -9,7 +12,7 @@ use crate::{
     event::go_out_and_in,
     score::{GuildUser, Scores},
     user::Username,
-    Context, Error,
+    Context, Data, Error,
 };
 
 /// Responds with "world!"
@@ -161,6 +164,18 @@ pub async fn gtfo(ctx: Context<'_>) -> Result<(), Error> {
     let now = Instant::now();
     let http = ctx.serenity_context().http.clone();
     let cache = ctx.serenity_context().cache.clone();
+
+    score_update(ctx.data().clone(), http, cache, now).await?;
+
+    Ok(())
+}
+
+pub async fn score_update(
+    data: Data,
+    http: Arc<Http>,
+    cache: Arc<Cache>,
+    now: Instant,
+) -> Result<(), Error> {
     let guild_infos = http.get_guilds(None, None).await?;
     let guild_ids: Vec<GuildId> = guild_infos.iter().map(|g| g.id).collect();
 
@@ -193,11 +208,11 @@ pub async fn gtfo(ctx: Context<'_>) -> Result<(), Error> {
 
         for mem in mems.iter() {
             let contain = {
-                let states = ctx.data().voice_state.lock().await;
+                let states = data.voice_state.lock().await;
                 states.timestamps.contains_key(mem)
             };
             if contain {
-                go_out_and_in(ctx.data(), mem.0, mem.1, now).await?;
+                go_out_and_in(&data, mem.0, mem.1, now).await?;
             }
         }
     }

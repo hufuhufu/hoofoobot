@@ -1,13 +1,21 @@
 use std::{
     collections::{HashMap, HashSet},
+    str::FromStr,
     sync::Arc,
     time::Instant,
 };
 
 use anyhow::Context as _;
+use apalis::{
+    cron::{CronStream, Schedule},
+    layers::{DefaultRetryPolicy, Extension, RetryLayer, TraceLayer},
+    prelude::*,
+};
 use cache::DataCache;
+use chrono::{DateTime, Utc};
+use commands::score_update;
 use database::Redis;
-use poise::serenity_prelude::{self as serenity, UserId};
+use poise::serenity_prelude::{self as serenity, Cache, Http, UserId};
 use shuttle_poise::ShuttlePoise;
 use shuttle_secrets::SecretStore;
 use tokio::sync::Mutex;
@@ -15,7 +23,7 @@ use tracing::info;
 
 use crate::score::GuildUser;
 
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 pub struct Data {
     db: Arc<Mutex<Redis>>,
     voice_state: Arc<Mutex<VoiceStates>>,
@@ -92,13 +100,36 @@ async fn poise(#[shuttle_secrets::Secrets] secret_store: SecretStore) -> Shuttle
         .intents(
             serenity::GatewayIntents::non_privileged() | serenity::GatewayIntents::MESSAGE_CONTENT,
         )
-        .setup(|_ctx, _ready, _framework| {
+        .setup(|ctx, _ready, _framework| {
+            let http = ctx.http.clone();
+            let cache = ctx.cache.clone();
+
             Box::pin(async move {
-                Ok(Data {
+                let data_ = Data {
                     db: db.clone(),
                     voice_state: voice_state.clone(),
                     cache: data_cache.clone(),
-                })
+                };
+                let data = data_.clone();
+
+                tokio::spawn(async move {
+                    let worker_data = WorkerData { data, http, cache };
+
+                    let schedule = Schedule::from_str("@hourly")?;
+                    let stream = CronStream::new(schedule).timer(timer::TokioTimer {});
+                    let worker = WorkerBuilder::new("hourly-score-update")
+                        .layer(RetryLayer::new(DefaultRetryPolicy))
+                        .layer(TraceLayer::new())
+                        .layer(Extension(worker_data))
+                        .stream(stream.to_stream())
+                        .build_fn(score_updater_fn);
+
+                    Monitor::new().register(worker).run().await?;
+
+                    Ok::<(), Error>(())
+                });
+
+                Ok(data_.clone())
             })
         })
         .build()
@@ -106,4 +137,33 @@ async fn poise(#[shuttle_secrets::Secrets] secret_store: SecretStore) -> Shuttle
         .map_err(shuttle_runtime::CustomError::new)?;
 
     Ok(framework.into())
+}
+
+#[derive(Default, Debug, Clone)]
+struct ScoreUpdater(DateTime<Utc>);
+
+impl From<DateTime<Utc>> for ScoreUpdater {
+    fn from(t: DateTime<Utc>) -> Self {
+        ScoreUpdater(t)
+    }
+}
+
+impl Job for ScoreUpdater {
+    const NAME: &'static str = "updater::HourlyScoreUpdater";
+}
+
+#[derive(Debug, Clone)]
+struct WorkerData {
+    data: Data,
+    http: Arc<Http>,
+    cache: Arc<Cache>,
+}
+
+async fn score_updater_fn(_job: ScoreUpdater, ctx: JobContext) -> Result<(), Error> {
+    let WorkerData { data, http, cache } = ctx.data::<WorkerData>()?.clone();
+    let now = Instant::now();
+
+    score_update(data, http, cache, now).await?;
+
+    Ok(())
 }
