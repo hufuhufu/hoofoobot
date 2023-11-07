@@ -2,7 +2,7 @@ use std::{
     collections::{HashMap, HashSet},
     str::FromStr,
     sync::Arc,
-    time::Instant,
+    time::{Duration, Instant},
 };
 
 use anyhow::Context as _;
@@ -81,13 +81,23 @@ async fn poise(#[shuttle_secrets::Secrets] secret_store: SecretStore) -> Shuttle
             pre_command: |ctx| {
                 Box::pin(async move {
                     let name = ctx.command().qualified_name.as_str();
+
+                    ctx.set_invocation_data(Instant::now()).await;
+
                     info!("Received command `{}`", name);
                 })
             },
             post_command: |ctx| {
                 Box::pin(async move {
                     let name = ctx.command().qualified_name.as_str();
-                    info!("Executed command {}", name);
+
+                    let when = ctx.invocation_data::<Instant>().await;
+                    let elapsed = match when {
+                        Some(when) => humantime::format_duration(when.elapsed()),
+                        None => humantime::format_duration(Duration::ZERO),
+                    };
+
+                    info!("Executed command {} in {}", name, elapsed.to_string());
                 })
             },
             event_handler: |ctx, event, _framework, data| {
