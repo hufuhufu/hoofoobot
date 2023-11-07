@@ -74,7 +74,7 @@ impl Scores {
     }
 }
 
-#[derive(Debug, Eq, PartialEq, Ord, Clone, Copy)]
+#[derive(Debug, Eq, PartialEq, Clone, Copy)]
 pub struct Score {
     pub guild_id: GuildId,
     pub user_id: UserId,
@@ -83,7 +83,13 @@ pub struct Score {
 
 impl PartialOrd for Score {
     fn partial_cmp(&self, other: &Self) -> Option<std::cmp::Ordering> {
-        self.score.partial_cmp(&other.score)
+        Some(self.cmp(other))
+    }
+}
+
+impl Ord for Score {
+    fn cmp(&self, other: &Self) -> std::cmp::Ordering {
+        self.score.cmp(&other.score)
     }
 }
 

@@ -65,7 +65,7 @@ pub async fn incr_score(
     duration: String,
 ) -> Result<(), Error> {
     let db = ctx.data().db.clone();
-    let duration = humantime::parse_duration(&duration.as_str())?;
+    let duration = humantime::parse_duration(duration.as_str())?;
     let dur_secs = duration.as_secs();
     let guild_user = GuildUser(member.guild_id, member.user.id);
 

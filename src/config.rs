@@ -41,8 +41,10 @@ impl Configs {
             match cache.get_mut_config(guild_id) {
                 Some(config) => config.afk_channel = Some(afk_channel_id),
                 None => {
-                    let mut config = Config::default();
-                    config.afk_channel = Some(afk_channel_id);
+                    let config = Config {
+                        afk_channel: Some(afk_channel_id),
+                        ..Default::default()
+                    };
                     cache.insert_config(guild_id, config);
                 }
             };
