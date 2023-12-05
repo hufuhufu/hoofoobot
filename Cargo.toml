@@ -12,7 +12,13 @@ shuttle-runtime = "0.34.0"
 shuttle-secrets = "0.34.0"
 tracing = "0.1.37"
 tokio = { version = "1.33.0", features = ["rt-multi-thread"] }
-redis = { version = "0.23.3", features = ["tokio-native-tls-comp", "tokio-comp"] }
+redis = { version = "0.23.3", features = [
+    "tokio-native-tls-comp",
+    "tokio-comp",
+    "r2d2",
+    "ahash",
+    "connection-manager",
+] }
 humantime = "2.1.0"
 comfy-table = { version = "7.1.0", default-features = false }
 apalis = { version = "0.4.5", features = ["cron", "retry", "extensions"] }
