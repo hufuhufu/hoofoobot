@@ -15,3 +15,4 @@ re_export!(set_afk_channel);
 // Owners only commands
 re_export!(gtfo);
 re_export!(incr_score);
+re_export!(voice_state);
