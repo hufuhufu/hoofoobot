@@ -5,6 +5,8 @@ use crate::{score::Scores, user::Username, Context, Error};
 /// Display voice time leaderboard
 #[poise::command(slash_command, prefix_command, guild_only)]
 pub async fn rank(ctx: Context<'_>) -> Result<(), Error> {
+    let msg = ctx.say("Calculating...").await?;
+
     let guild_id = ctx.guild_id().unwrap();
     let cache = ctx.data().cache.clone();
 
@@ -39,14 +41,14 @@ pub async fn rank(ctx: Context<'_>) -> Result<(), Error> {
         ]);
     }
 
-    ctx.say(format!(
+    let content = format!(
         "```md\n\
         Voice Chat Total Time Ranking\n\
         =============================\n\
         > Top global penghuni voice chat.``````{}```",
         table
-    ))
-    .await?;
+    );
+    msg.edit(ctx, |re| re.content(content)).await?;
 
     Ok(())
 }
