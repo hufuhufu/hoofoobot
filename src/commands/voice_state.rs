@@ -14,7 +14,7 @@ pub async fn show(ctx: Context<'_>) -> Result<(), Error> {
         format!("{:#?}", vs.timestamps)
     };
 
-    ctx.say(text).await?;
+    ctx.say(format!("```{text}```")).await?;
     Ok(())
 }
 
