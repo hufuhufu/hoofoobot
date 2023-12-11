@@ -116,31 +116,33 @@ async fn poise(#[shuttle_secrets::Secrets] secret_store: SecretStore) -> Shuttle
             let cache = ctx.cache.clone();
 
             Box::pin(async move {
-                let data_ = Data {
+                let data = Data {
                     db: db.clone(),
                     voice_state: voice_state.clone(),
                     cache: data_cache.clone(),
                 };
-                let data = data_.clone();
 
-                tokio::spawn(async move {
-                    let worker_data = WorkerData { data, http, cache };
+                {
+                    let data = data.clone();
+                    tokio::spawn(async move {
+                        let worker_data = WorkerData { data, http, cache };
 
-                    let schedule = Schedule::from_str("@hourly")?;
-                    let stream = CronStream::new(schedule).timer(timer::TokioTimer {});
-                    let worker = WorkerBuilder::new("hourly-score-update")
-                        .layer(RetryLayer::new(DefaultRetryPolicy))
-                        .layer(TraceLayer::new())
-                        .layer(Extension(worker_data))
-                        .stream(stream.to_stream())
-                        .build_fn(score_updater_fn);
+                        let schedule = Schedule::from_str("@hourly")?;
+                        let stream = CronStream::new(schedule).timer(timer::TokioTimer {});
+                        let worker = WorkerBuilder::new("hourly-score-update")
+                            .layer(RetryLayer::new(DefaultRetryPolicy))
+                            .layer(TraceLayer::new())
+                            .layer(Extension(worker_data))
+                            .stream(stream.to_stream())
+                            .build_fn(score_updater_fn);
 
-                    Monitor::new().register(worker).run().await?;
+                        Monitor::new().register(worker).run().await?;
 
-                    Ok::<(), Error>(())
-                });
+                        Ok::<(), Error>(())
+                    });
+                }
 
-                Ok(data_.clone())
+                Ok(data)
             })
         })
         .build()
