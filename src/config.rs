@@ -31,9 +31,9 @@ impl Configs {
 
         let mut conn = Redis::get_connection(db).await?;
         conn.hset(
-            format!("config:{}", guild_id.0),
+            format!("config:{}", guild_id.get()),
             "afk_channel",
-            afk_channel_id.0,
+            afk_channel_id.get(),
         )
         .await?;
         {
@@ -75,8 +75,8 @@ impl FromRedisValue for Config {
 
                 for (k, v) in conf_map {
                     match from_val::<String>(k)?.as_str() {
-                        "graveyard" => conf.graveyard = Some(ChannelId(from_val(v)?)),
-                        "afk_channel" => conf.afk_channel = Some(ChannelId(from_val(v)?)),
+                        "graveyard" => conf.graveyard = Some(ChannelId::new(from_val(v)?)),
+                        "afk_channel" => conf.afk_channel = Some(ChannelId::new(from_val(v)?)),
                         _ => println!("Unknown field {:#?} = {:#?}", k, v),
                     }
                 }

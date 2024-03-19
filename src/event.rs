@@ -2,8 +2,8 @@ use std::time::Instant;
 
 use anyhow::Result;
 use poise::{
-    serenity_prelude::{self as serenity, GuildId, UserId},
-    Event, FrameworkContext,
+    serenity_prelude::{self as serenity, FullEvent, GuildId, UserId},
+    FrameworkContext,
 };
 use tracing::{info, warn};
 
@@ -13,18 +13,18 @@ use crate::{
     Data, Error,
 };
 
-#[tracing::instrument(skip_all, fields(event=event.name()))]
+#[tracing::instrument(skip_all, fields(event=event.snake_case_name()))]
 pub async fn event_handler(
     ctx: &serenity::Context,
-    event: &Event<'_>,
+    event: &FullEvent,
     _framework: FrameworkContext<'_, Data, Error>,
     data: &Data,
 ) -> Result<(), Error> {
     match event {
-        Event::Ready { data_about_bot } => {
+        FullEvent::Ready { data_about_bot } => {
             info!("Bot is online as {}", data_about_bot.user.name);
         }
-        Event::Message { new_message } => {
+        FullEvent::Message { new_message } => {
             if new_message.author.bot {
                 return Ok(());
             }
@@ -35,7 +35,7 @@ pub async fn event_handler(
                     .await?;
             }
         }
-        Event::VoiceStateUpdate { old, new } => {
+        FullEvent::VoiceStateUpdate { old, new } => {
             let now = Instant::now();
             let Some(guild_id) = new.guild_id else {
                 return Ok(());

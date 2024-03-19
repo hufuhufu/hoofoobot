@@ -16,8 +16,8 @@ use chrono::{DateTime, Utc};
 use commands::score_update;
 use database::Redis;
 use poise::serenity_prelude::{self as serenity, Cache, Http, UserId};
-use shuttle_poise::ShuttlePoise;
-use shuttle_secrets::SecretStore;
+use shuttle_runtime::SecretStore;
+use shuttle_serenity::ShuttleSerenity;
 use tokio::sync::Mutex;
 use tracing::info;
 
@@ -47,7 +47,7 @@ mod score;
 mod user;
 
 #[shuttle_runtime::main]
-async fn poise(#[shuttle_secrets::Secrets] secret_store: SecretStore) -> ShuttlePoise<Data, Error> {
+async fn serenity(#[shuttle_runtime::Secrets] secret_store: SecretStore) -> ShuttleSerenity {
     // Get the discord token set in `Secrets.toml`
     let discord_token = secret_store
         .get("DISCORD_TOKEN")
@@ -57,6 +57,9 @@ async fn poise(#[shuttle_secrets::Secrets] secret_store: SecretStore) -> Shuttle
     let redis_url = secret_store
         .get("REDIS_URL")
         .context("'REDIS_URL' was not found in Secrets.toml.")?;
+
+    let intents =
+        serenity::GatewayIntents::non_privileged() | serenity::GatewayIntents::MESSAGE_CONTENT;
 
     let db = Arc::new(Mutex::new(Redis::new(redis_url)));
     let voice_state = Arc::new(Mutex::new(VoiceStates::default()));
@@ -104,13 +107,9 @@ async fn poise(#[shuttle_secrets::Secrets] secret_store: SecretStore) -> Shuttle
             event_handler: |ctx, event, _framework, data| {
                 Box::pin(event::event_handler(ctx, event, _framework, data))
             },
-            owners: HashSet::from([UserId(429661753362874402)]),
+            owners: HashSet::from([UserId::new(429661753362874402)]),
             ..Default::default()
         })
-        .token(discord_token)
-        .intents(
-            serenity::GatewayIntents::non_privileged() | serenity::GatewayIntents::MESSAGE_CONTENT,
-        )
         .setup(|ctx, _ready, _framework| {
             let http = ctx.http.clone();
             let cache = ctx.cache.clone();
@@ -145,11 +144,14 @@ async fn poise(#[shuttle_secrets::Secrets] secret_store: SecretStore) -> Shuttle
                 Ok(data)
             })
         })
-        .build()
-        .await
-        .map_err(shuttle_runtime::CustomError::new)?;
+        .build();
 
-    Ok(framework.into())
+    let client = serenity::ClientBuilder::new(&discord_token, intents)
+        .framework(framework)
+        .await
+        .expect("Failed to create serenity client");
+
+    Ok(client.into())
 }
 
 #[derive(Default, Debug, Clone)]

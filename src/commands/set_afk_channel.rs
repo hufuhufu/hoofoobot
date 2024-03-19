@@ -1,6 +1,6 @@
-use poise::serenity_prelude::ChannelId;
+use poise::{serenity_prelude::ChannelId, CreateReply};
 
-use crate::{Context, Error, config::Configs};
+use crate::{config::Configs, Context, Error};
 
 /// Set channel id of the AFK channel in this server.
 #[poise::command(slash_command, prefix_command, guild_only)]
@@ -14,10 +14,10 @@ pub async fn set_afk_channel(
 
     Configs::set_afk_channel(ctx.data(), guild_id, afk_channel_id).await?;
 
-    ctx.send(|reply| {
-        reply
-            .content(format!("AFK channel id set to {}", afk_channel_id.0))
-            .ephemeral(true)
+    ctx.send(CreateReply {
+        content: Some(format!("AFK channel id set to {}", afk_channel_id.get())),
+        ephemeral: Some(true),
+        ..Default::default()
     })
     .await?;
 

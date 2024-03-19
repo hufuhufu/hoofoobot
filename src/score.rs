@@ -12,13 +12,13 @@ pub struct Scores {}
 impl Scores {
     pub async fn get_all_score(ctx: Context<'_>, guild_id: GuildId) -> Result<Arc<[Score]>> {
         let db = ctx.data().db.clone();
-        let key = format!("score:{}", guild_id.0);
+        let key = format!("score:{}", guild_id.get());
         let mut conn = Redis::get_connection(db.clone()).await?;
 
         let id_set: Vec<String> = conn.smembers(key.as_str()).await?;
         let keys: Vec<String> = id_set
             .iter()
-            .map(|s| format!("score:{}:{}", guild_id.0, s))
+            .map(|s| format!("score:{}:{}", guild_id.get(), s))
             .collect();
 
         let mut conn = Redis::get_connection(db.clone()).await?;
@@ -52,7 +52,7 @@ impl Scores {
         let user_id = member.1;
 
         let score: u64 = conn
-            .get(format!("score:{}:{}", guild_id.0, user_id.0))
+            .get(format!("score:{}:{}", guild_id.get(), user_id.get()))
             .await?;
         let score = Duration::from_secs(score);
 
@@ -65,7 +65,7 @@ impl Scores {
         let user_id = member.1;
 
         let (after,) = redis::pipe()
-            .sadd(format!("score:{guild_id}"), user_id.0)
+            .sadd(format!("score:{guild_id}"), user_id.get())
             .ignore()
             .incr(format!("score:{guild_id}:{user_id}"), delta)
             .query_async(&mut conn)

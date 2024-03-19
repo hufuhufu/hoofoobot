@@ -1,4 +1,5 @@
 use comfy_table::{modifiers::UTF8_ROUND_CORNERS, presets::UTF8_FULL_CONDENSED, Table};
+use poise::CreateReply;
 
 use crate::{score::Scores, user::Username, Context, Error};
 
@@ -48,7 +49,14 @@ pub async fn rank(ctx: Context<'_>) -> Result<(), Error> {
         > Top global penghuni voice chat.``````{}```",
         table
     );
-    msg.edit(ctx, |re| re.content(content)).await?;
+    msg.edit(
+        ctx,
+        CreateReply {
+            content: Some(content),
+            ..Default::default()
+        },
+    )
+    .await?;
 
     Ok(())
 }

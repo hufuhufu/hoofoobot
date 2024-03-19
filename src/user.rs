@@ -11,14 +11,10 @@ pub struct Username {
 
 impl Username {
     pub async fn from_user_id(ctx: Context<'_>, user_id: UserId) -> Result<Username> {
-        let user = match user_id.to_user_cached(ctx).await {
-            Some(u) => u,
-            None => user_id.to_user(ctx).await?,
-        };
-
+        let user = user_id.to_user(ctx).await?;
         let username: Arc<str> = user.name.into();
 
-        Ok(Username{ username })
+        Ok(Username { username })
     }
 }
 

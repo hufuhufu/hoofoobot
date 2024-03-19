@@ -1,4 +1,6 @@
-use crate::{Context, Error, config::Configs};
+use poise::{serenity_prelude::EditChannel, CreateReply};
+
+use crate::{config::Configs, Context, Error};
 
 /// Move this channel to graveyard.
 #[poise::command(slash_command, prefix_command, guild_only)]
@@ -12,7 +14,9 @@ pub async fn graveyard(ctx: Context<'_>) -> Result<(), Error> {
     let config = Configs::get_guild_config(ctx.data(), guild_id).await?;
     match config.graveyard {
         Some(graveyard_id) => {
-            channel_id.edit(ctx, |c| c.category(graveyard_id)).await?;
+            channel_id
+                .edit(ctx, EditChannel::new().category(graveyard_id))
+                .await?;
         }
         None => {
             ctx.say("There is no graveyard category set for this server!")
@@ -20,8 +24,12 @@ pub async fn graveyard(ctx: Context<'_>) -> Result<(), Error> {
         }
     }
 
-    ctx.send(|reply| reply.content("Channel moved!").ephemeral(true))
-        .await?;
+    ctx.send(CreateReply {
+        content: Some("Channel moved!".into()),
+        ephemeral: Some(true),
+        ..Default::default()
+    })
+    .await?;
 
     Ok(())
 }

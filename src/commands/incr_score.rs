@@ -1,6 +1,6 @@
 use std::time::Duration;
 
-use poise::serenity_prelude::Member;
+use poise::{serenity_prelude::Member, CreateReply};
 
 use crate::{
     score::{GuildUser, Scores},
@@ -24,15 +24,15 @@ pub async fn incr_score(
     let after = Scores::incr_score(db, guild_user, dur_secs).await?;
     let after = Duration::from_secs(after);
 
-    ctx.send(|reply| {
-        reply
-            .content(format!(
-                "{}'s score incremented by {}, now their score is {}",
-                member,
-                humantime::format_duration(duration),
-                humantime::format_duration(after),
-            ))
-            .ephemeral(true)
+    ctx.send(CreateReply {
+        content: Some(format!(
+            "{}'s score incremented by {}, now their score is {}",
+            member,
+            humantime::format_duration(duration),
+            humantime::format_duration(after),
+        )),
+        ephemeral: Some(true),
+        ..Default::default()
     })
     .await?;
 

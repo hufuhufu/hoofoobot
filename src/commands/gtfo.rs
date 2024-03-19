@@ -47,8 +47,7 @@ pub async fn score_update(
 
     for ch in guild_vcs.iter() {
         let mems = ch
-            .members(cache.clone())
-            .await?
+            .members(cache.clone())?
             .iter()
             .map(|mem| GuildUser(mem.guild_id, mem.user.id))
             .collect::<Vec<_>>();
