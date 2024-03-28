@@ -10,7 +10,7 @@ pub struct Redis {
 }
 
 impl Redis {
-    pub fn new(url: String) -> Self {
+    pub fn new(url: &str) -> Self {
         let client = Client::open(url).expect("DB: Failed to start redis client.");
 
         Redis { client }
