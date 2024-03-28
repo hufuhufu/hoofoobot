@@ -61,88 +61,63 @@ async fn serenity(#[shuttle_runtime::Secrets] secret_store: SecretStore) -> Shut
     let intents =
         serenity::GatewayIntents::non_privileged() | serenity::GatewayIntents::MESSAGE_CONTENT;
 
-    let db = Arc::new(Mutex::new(Redis::new(redis_url)));
-    let voice_state = Arc::new(Mutex::new(VoiceStates::default()));
-    let data_cache = Arc::new(Mutex::new(DataCache::default()));
-
-    let framework = poise::Framework::builder()
-        .options(poise::FrameworkOptions {
-            commands: vec![
-                commands::hello(),
-                commands::graveyard(),
-                commands::register(),
-                commands::incr_score(),
-                commands::set_afk_channel(),
-                commands::rank(),
-                commands::gtfo(),
-                commands::voice_state(),
-            ],
-            prefix_options: poise::PrefixFrameworkOptions {
-                prefix: Some("f:".into()),
-                additional_prefixes: vec![poise::Prefix::Literal("F:")],
-                ..Default::default()
-            },
-            pre_command: |ctx| {
-                Box::pin(async move {
-                    let name = ctx.command().qualified_name.as_str();
-
-                    ctx.set_invocation_data(Instant::now()).await;
-
-                    info!("Received command `{}`", name);
-                })
-            },
-            post_command: |ctx| {
-                Box::pin(async move {
-                    let name = ctx.command().qualified_name.as_str();
-
-                    let when = ctx.invocation_data::<Instant>().await;
-                    let elapsed = match when {
-                        Some(when) => humantime::format_duration(when.elapsed()),
-                        None => humantime::format_duration(Duration::ZERO),
-                    };
-
-                    info!("Executed command {} in {}", name, elapsed.to_string());
-                })
-            },
-            event_handler: |ctx, event, _framework, data| {
-                Box::pin(event::event_handler(ctx, event, _framework, data))
-            },
-            owners: HashSet::from([UserId::new(429661753362874402)]),
+    let framework_options = poise::FrameworkOptions {
+        commands: vec![
+            commands::hello(),
+            commands::graveyard(),
+            commands::register(),
+            commands::incr_score(),
+            commands::set_afk_channel(),
+            commands::rank(),
+            commands::gtfo(),
+            commands::voice_state(),
+        ],
+        prefix_options: poise::PrefixFrameworkOptions {
+            prefix: Some("f:".into()),
+            additional_prefixes: vec![poise::Prefix::Literal("F:")],
             ..Default::default()
-        })
-        .setup(|ctx, _ready, _framework| {
-            let http = ctx.http.clone();
-            let cache = ctx.cache.clone();
-
+        },
+        pre_command: |ctx| {
             Box::pin(async move {
-                let data = Data {
-                    db: db.clone(),
-                    voice_state: voice_state.clone(),
-                    cache: data_cache.clone(),
+                let name = ctx.command().qualified_name.as_str();
+
+                ctx.set_invocation_data(Instant::now()).await;
+
+                info!("Received command `{}`", name);
+            })
+        },
+        post_command: |ctx| {
+            Box::pin(async move {
+                let name = ctx.command().qualified_name.as_str();
+
+                let when = ctx.invocation_data::<Instant>().await;
+                let elapsed = match when {
+                    Some(when) => humantime::format_duration(when.elapsed()),
+                    None => humantime::format_duration(Duration::ZERO),
                 };
 
-                {
-                    let data = data.clone();
-                    tokio::spawn(async move {
-                        let worker_data = WorkerData { data, http, cache };
-
-                        let schedule = Schedule::from_str("@hourly")?;
-                        let stream = CronStream::new(schedule).timer(timer::TokioTimer {});
-                        let worker = WorkerBuilder::new("hourly-score-update")
-                            .layer(RetryLayer::new(DefaultRetryPolicy))
-                            .layer(TraceLayer::new())
-                            .layer(Extension(worker_data))
-                            .stream(stream.to_stream())
-                            .build_fn(score_updater_fn);
-
-                        Monitor::new().register(worker).run().await?;
-
-                        Ok::<(), Error>(())
-                    });
-                }
-
-                Ok(data)
+                info!("Executed command {} in {}", name, elapsed.to_string());
             })
+        },
+        event_handler: |ctx, event, _framework, data| {
+            Box::pin(event::event_handler(ctx, event, _framework, data))
+        },
+        owners: HashSet::from([UserId::new(429661753362874402)]),
+        ..Default::default()
+    };
+
+    let framework = poise::Framework::builder()
+        .options(framework_options)
+        .setup(move |ctx, _ready, _framework| {
+            let http = ctx.http.clone();
+            let cache = ctx.cache.clone();
+            let data = Data {
+                db: Arc::new(Mutex::new(Redis::new(redis_url.as_str()))),
+                voice_state: Arc::new(Mutex::new(VoiceStates::default())),
+                cache: Arc::new(Mutex::new(DataCache::default())),
+            };
+
+            framework_setup(http, cache, data)
         })
         .build();
 
@@ -152,6 +127,37 @@ async fn serenity(#[shuttle_runtime::Secrets] secret_store: SecretStore) -> Shut
         .expect("Failed to create serenity client");
 
     Ok(client.into())
+}
+
+fn framework_setup(
+    http: Arc<Http>,
+    cache: Arc<Cache>,
+    data: Data,
+) -> poise::BoxFuture<'static, Result<Data, Error>> {
+    Box::pin(async move {
+        // Background worker setup
+        {
+            let data = data.clone();
+            tokio::spawn(async move {
+                let worker_data = WorkerData { data, http, cache };
+
+                let schedule = Schedule::from_str("@hourly")?;
+                let stream = CronStream::new(schedule).timer(timer::TokioTimer {});
+                let worker = WorkerBuilder::new("hourly-score-update")
+                    .layer(RetryLayer::new(DefaultRetryPolicy))
+                    .layer(TraceLayer::new())
+                    .layer(Extension(worker_data))
+                    .stream(stream.to_stream())
+                    .build_fn(score_updater_fn);
+
+                Monitor::new().register(worker).run().await?;
+
+                Ok::<(), Error>(())
+            });
+        }
+
+        Ok(data)
+    })
 }
 
 #[derive(Default, Debug, Clone)]
