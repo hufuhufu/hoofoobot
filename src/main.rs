@@ -18,7 +18,7 @@ use database::Redis;
 use poise::serenity_prelude::{self as serenity, Cache, Http, UserId};
 use shuttle_runtime::SecretStore;
 use shuttle_serenity::ShuttleSerenity;
-use tokio::sync::Mutex;
+use tokio::sync::{mpsc, Mutex};
 use tracing::info;
 
 use crate::score::GuildUser;
@@ -28,6 +28,7 @@ pub struct Data {
     db: Arc<Mutex<Redis>>,
     voice_state: Arc<Mutex<VoiceStates>>,
     cache: Arc<Mutex<DataCache>>,
+    tx: mpsc::Sender<pocketbase::Command>,
 }
 
 #[derive(Debug, Default)]
@@ -53,11 +54,6 @@ async fn serenity(#[shuttle_runtime::Secrets] secret_store: SecretStore) -> Shut
     let discord_token = secret_store
         .get("DISCORD_TOKEN")
         .context("'DISCORD_TOKEN' was not found in Secrets.toml")?;
-
-    // Get the redis URL set in `Secrets.toml`
-    let redis_url = secret_store
-        .get("REDIS_URL")
-        .context("'REDIS_URL' was not found in Secrets.toml.")?;
 
     let intents =
         serenity::GatewayIntents::non_privileged() | serenity::GatewayIntents::MESSAGE_CONTENT;
@@ -109,17 +105,7 @@ async fn serenity(#[shuttle_runtime::Secrets] secret_store: SecretStore) -> Shut
 
     let framework = poise::Framework::builder()
         .options(framework_options)
-        .setup(move |ctx, _ready, _framework| {
-            let http = ctx.http.clone();
-            let cache = ctx.cache.clone();
-            let data = Data {
-                db: Arc::new(Mutex::new(Redis::new(redis_url.as_str()))),
-                voice_state: Arc::new(Mutex::new(VoiceStates::default())),
-                cache: Arc::new(Mutex::new(DataCache::default())),
-            };
-
-            framework_setup(http, cache, data)
-        })
+        .setup(move |ctx, _, _| framework_setup(ctx, &secret_store))
         .build();
 
     let client = serenity::ClientBuilder::new(&discord_token, intents)
@@ -131,10 +117,44 @@ async fn serenity(#[shuttle_runtime::Secrets] secret_store: SecretStore) -> Shut
 }
 
 fn framework_setup(
-    http: Arc<Http>,
-    cache: Arc<Cache>,
-    data: Data,
+    ctx: &serenity::Context,
+    secret_store: &SecretStore,
 ) -> poise::BoxFuture<'static, Result<Data, Error>> {
+    // Get the redis URL set in `Secrets.toml`
+    let redis_url = secret_store
+        .get("REDIS_URL")
+        .context("'REDIS_URL' was not found in Secrets.toml.")
+        .unwrap();
+
+    // Get the pocketbase URL set in `Secrets.toml`
+    let pb_url = secret_store
+        .get("POCKETBASE_URL")
+        .context("'POCKETBASE_URL' was not found in Secrets.toml.")
+        .unwrap();
+
+    // Get the pocketbase username set in `Secrets.toml`
+    let pb_username = secret_store
+        .get("POCKETBASE_USERNAME")
+        .context("'POCKETBASE_USERNAME' was not found in Secrets.toml.")
+        .unwrap();
+
+    // Get the pocketbase password set in `Secrets.toml`
+    let pb_password = secret_store
+        .get("POCKETBASE_PASSWORD")
+        .context("'POCKETBASE_PASSWORD' was not found in Secrets.toml.")
+        .unwrap();
+
+    let http = ctx.http.clone();
+    let cache = ctx.cache.clone();
+    let (tx, rx) = mpsc::channel::<pocketbase::Command>(10);
+
+    let data = Data {
+        db: Arc::new(Mutex::new(Redis::new(&redis_url))),
+        voice_state: Arc::new(Mutex::new(VoiceStates::default())),
+        cache: Arc::new(Mutex::new(DataCache::default())),
+        tx,
+    };
+
     Box::pin(async move {
         // Background worker setup
         {
@@ -155,6 +175,14 @@ fn framework_setup(
 
                 Ok::<(), Error>(())
             });
+        }
+
+        // Pocketbase background worker setup
+        {
+            let client = pocketbase::Client::new(&pb_url, &pb_username, &pb_password).await?;
+            let manager = pocketbase::Manager::new(client);
+
+            manager.spawn(rx);
         }
 
         Ok(data)
