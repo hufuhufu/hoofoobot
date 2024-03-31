@@ -5,10 +5,12 @@ use poise::{
     serenity_prelude::{self as serenity, FullEvent, GuildId, UserId},
     FrameworkContext,
 };
+use tokio::sync::oneshot;
 use tracing::{info, warn};
 
 use crate::{
     config::Configs,
+    pocketbase,
     score::{GuildUser, Scores},
     Data, Error,
 };
@@ -130,8 +132,6 @@ async fn go_out(data: &Data, guild_id: GuildId, user_id: UserId, now: Instant) -
     };
     let duration = now.duration_since(then);
 
-    Scores::incr_score(data.db.clone(), guild_user, duration.as_secs()).await?;
-
     {
         let mut voice_state = data.voice_state.lock().await;
         voice_state.timestamps.insert(guild_user, None);
@@ -140,6 +140,17 @@ async fn go_out(data: &Data, guild_id: GuildId, user_id: UserId, now: Instant) -
         let mut cache = data.cache.lock().await;
         cache.rem_scores(guild_id);
     }
+
+    Scores::incr_score(data.db.clone(), guild_user, duration.as_secs()).await?;
+    let (tx, rx) = oneshot::channel();
+    data.tx
+        .send(pocketbase::Command::IncrScore {
+            member: guild_user,
+            delta: duration.as_secs(),
+            resp_tx: tx,
+        })
+        .await?;
+    let _ = rx.await??;
 
     let fmt_duration = humantime::format_duration(duration);
     info!("Left voice after being there for {fmt_duration}");
