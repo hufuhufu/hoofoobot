@@ -43,6 +43,7 @@ mod commands;
 mod config;
 mod database;
 mod event;
+mod pocketbase;
 mod score;
 mod user;
 
