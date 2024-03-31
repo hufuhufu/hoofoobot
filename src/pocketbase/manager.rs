@@ -179,11 +179,6 @@ async fn handle_command(client: Client, cmd: Command) {
                             ..Default::default()
                         };
 
-                        println!(
-                            "{:?}\n{:?}\n{:?}",
-                            guild_record, player_record, score_record
-                        );
-
                         let res = client.create::<ScoreRecord>("scores", score_record).await;
                         let res = match res {
                             Ok(res) => res,
