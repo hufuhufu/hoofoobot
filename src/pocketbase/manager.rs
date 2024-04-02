@@ -16,6 +16,39 @@ macro_rules! bails {
     };
 }
 
+macro_rules! unwrap_result_or_bails {
+    ($tx:expr, $result:expr) => {
+        match $result {
+            Ok(value) => value,
+            Err(err) => {
+                bails!($tx, err);
+            }
+        }
+    };
+}
+
+macro_rules! do_list_or_bails {
+    ($tx:expr, $res:expr, $res_type:ident, $blk:block) => {
+        match $res {
+            $res_type::Ok { .. } => $blk,
+            $res_type::Error { error } => {
+                bails!($tx, error.into());
+            }
+        }
+    };
+}
+
+macro_rules! unwrap_record_or_bails {
+    ($tx:expr, $res:expr) => {
+        match $res {
+            CVUResponse::Ok { record } => record,
+            CVUResponse::Error { error } => {
+                bails!($tx, error.into());
+            }
+        }
+    };
+}
+
 pub enum Command {
     IncrScore {
         member: GuildUser,
@@ -36,170 +69,104 @@ impl Manager {
         let client = self.client.clone();
         tokio::spawn(async move {
             while let Some(cmd) = rx.recv().await {
-                handle_command(client.clone(), cmd).await;
+                command_handler(client.clone(), cmd).await;
             }
         });
     }
 }
 
-async fn handle_command(client: Client, cmd: Command) {
+async fn command_handler(client: Client, cmd: Command) {
     match cmd {
-        Command::IncrScore {
-            member,
-            delta,
-            resp_tx,
-        } => {
-            let filter = format!(
-                "guild.server_id = \"{}\" && player.user_id = \"{}\"",
-                member.0, member.1
-            );
+        Command::IncrScore { .. } => incr_score_handler(client, cmd).await,
+    };
+}
 
-            let res = client
-                .list::<ScoreRecord>("scores", Some(filter.as_str()))
-                .await;
-            let list = match res {
-                Ok(list) => list,
-                Err(err) => {
-                    bails!(resp_tx, err);
-                }
-            };
+async fn incr_score_handler(client: Client, cmd: Command) {
+    let Command::IncrScore {
+        member,
+        delta,
+        resp_tx,
+    } = cmd;
 
-            match list {
-                ListResponse::Ok { mut items, .. } => {
+    let filter = format!(
+        "guild.server_id = \"{}\" && player.user_id = \"{}\"",
+        member.0, member.1
+    );
+
+    let res = client
+        .list::<ScoreRecord>("scores", Some(filter.as_str()))
+        .await;
+    let list_score_res = unwrap_result_or_bails!(resp_tx, res);
+
+    do_list_or_bails!(resp_tx, list_score_res, ListResponse, {
+        let mut items = list_score_res.unwrap();
+
+        if !items.is_empty() {
+            let mut score = items.pop().unwrap();
+            score.voice_time += delta;
+
+            let res = client.update::<ScoreRecord>(score).await;
+            let record_res = unwrap_result_or_bails!(resp_tx, res);
+            let record = unwrap_record_or_bails!(resp_tx, record_res);
+
+            let _ = resp_tx.send(Ok(record));
+        } else {
+            let guild_record = {
+                let filter = format!("server_id = \"{}\"", member.0);
+                let res = client
+                    .list::<GuildRecord>("guilds", Some(filter.as_str()))
+                    .await;
+
+                let list_guild_res = unwrap_result_or_bails!(resp_tx, res);
+
+                do_list_or_bails!(resp_tx, list_guild_res, ListResponse, {
+                    let mut items = list_guild_res.unwrap();
+
                     if !items.is_empty() {
-                        let mut score = items.pop().unwrap();
-                        score.voice_time += delta;
-
-                        let res = client.update::<ScoreRecord>(score).await;
-                        let res = match res {
-                            Ok(record) => record,
-                            Err(err) => {
-                                bails!(resp_tx, err);
-                            }
-                        };
-                        let record = match res {
-                            CVUResponse::Ok { record } => Ok(record),
-                            CVUResponse::Error { error } => {
-                                bails!(resp_tx, error.into());
-                            }
-                        };
-
-                        let _ = resp_tx.send(record);
+                        items.pop().unwrap()
                     } else {
-                        let guild_record = {
-                            let filter = format!("server_id = \"{}\"", member.0);
-                            let res = client
-                                .list::<GuildRecord>("guilds", Some(filter.as_str()))
-                                .await;
-                            let list = match res {
-                                Ok(list) => list,
-                                Err(err) => {
-                                    bails!(resp_tx, err);
-                                }
-                            };
-                            match list {
-                                ListResponse::Ok { mut items, .. } => {
-                                    if !items.is_empty() {
-                                        items.pop().unwrap()
-                                    } else {
-                                        let guild_record = GuildRecord {
-                                            server_id: member.0.to_string(),
-                                            ..Default::default()
-                                        };
-                                        let res = client
-                                            .create::<GuildRecord>("guilds", guild_record)
-                                            .await;
-                                        let res = match res {
-                                            Ok(record) => record,
-                                            Err(err) => {
-                                                bails!(resp_tx, err);
-                                            }
-                                        };
-                                        match res {
-                                            CVUResponse::Ok { record } => record,
-                                            CVUResponse::Error { error } => {
-                                                bails!(resp_tx, error.into());
-                                            }
-                                        }
-                                    }
-                                }
-                                ListResponse::Error { error } => {
-                                    bails!(resp_tx, error.into());
-                                }
-                            }
-                        };
-
-                        let player_record = {
-                            let filter = format!("user_id = \"{}\"", member.1);
-                            let res = client
-                                .list::<PlayerRecord>("players", Some(filter.as_str()))
-                                .await;
-                            let list = match res {
-                                Ok(list) => list,
-                                Err(err) => {
-                                    bails!(resp_tx, err);
-                                }
-                            };
-                            match list {
-                                ListResponse::Ok { mut items, .. } => {
-                                    if !items.is_empty() {
-                                        items.pop().unwrap()
-                                    } else {
-                                        let player_record = PlayerRecord {
-                                            user_id: member.1.to_string(),
-                                            ..Default::default()
-                                        };
-                                        let res = client
-                                            .create::<PlayerRecord>("players", player_record)
-                                            .await;
-                                        let res = match res {
-                                            Ok(record) => record,
-                                            Err(err) => {
-                                                bails!(resp_tx, err);
-                                            }
-                                        };
-                                        match res {
-                                            CVUResponse::Ok { record } => record,
-                                            CVUResponse::Error { error } => {
-                                                bails!(resp_tx, error.into());
-                                            }
-                                        }
-                                    }
-                                }
-                                ListResponse::Error { error } => {
-                                    bails!(resp_tx, error.into());
-                                }
-                            }
-                        };
-
-                        let score_record = ScoreRecord {
-                            guild: guild_record.default.id.clone(),
-                            player: player_record.default.id.clone(),
-                            voice_time: delta,
-                            ..Default::default()
-                        };
-
-                        let res = client.create::<ScoreRecord>("scores", score_record).await;
-                        let res = match res {
-                            Ok(res) => res,
-                            Err(err) => {
-                                bails!(resp_tx, err);
-                            }
-                        };
-                        let record = match res {
-                            CVUResponse::Ok { record } => Ok(record),
-                            CVUResponse::Error { error } => {
-                                bails!(resp_tx, error.into());
-                            }
-                        };
-
-                        let _ = resp_tx.send(record);
+                        let guild_record = GuildRecord::new(member.0.to_string());
+                        let res = client.create::<GuildRecord>("guilds", guild_record).await;
+                        let record_res = unwrap_result_or_bails!(resp_tx, res);
+                        unwrap_record_or_bails!(resp_tx, record_res)
                     }
-                }
-                ListResponse::Error { error } => {
-                    bails!(resp_tx, error.into());
-                }
+                })
             };
+
+            let player_record = {
+                let filter = format!("server_id = \"{}\"", member.0);
+                let res = client
+                    .list::<PlayerRecord>("guilds", Some(filter.as_str()))
+                    .await;
+
+                let list_guild_res = unwrap_result_or_bails!(resp_tx, res);
+
+                do_list_or_bails!(resp_tx, list_guild_res, ListResponse, {
+                    let mut items = list_guild_res.unwrap();
+
+                    if !items.is_empty() {
+                        items.pop().unwrap()
+                    } else {
+                        let guild_record = PlayerRecord::new(member.0.to_string());
+                        let res = client.create::<PlayerRecord>("guilds", guild_record).await;
+                        let record_res = unwrap_result_or_bails!(resp_tx, res);
+                        unwrap_record_or_bails!(resp_tx, record_res)
+                    }
+                })
+            };
+
+            let score_record = ScoreRecord {
+                guild: guild_record.default.id.clone(),
+                player: player_record.default.id.clone(),
+                voice_time: delta,
+                ..Default::default()
+            };
+
+            let res = client.create::<ScoreRecord>("scores", score_record).await;
+            let record_res = unwrap_result_or_bails!(resp_tx, res);
+            let record = unwrap_record_or_bails!(resp_tx, record_res);
+
+            let _ = resp_tx.send(Ok(record));
         }
-    }
+    });
 }
