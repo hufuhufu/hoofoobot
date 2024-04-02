@@ -27,6 +27,17 @@ pub enum ListResponse<R: Record> {
     },
 }
 
+impl<R: Record> ListResponse<R> {
+    pub fn unwrap(self) -> Vec<R> {
+        match self {
+            ListResponse::Ok { items, .. } => items,
+            ListResponse::Error { error } => {
+                panic!("ListResponse called unwrap on Error: {}", error)
+            }
+        }
+    }
+}
+
 #[derive(Debug, Deserialize)]
 #[serde(untagged)]
 pub enum CVUResponse<R: Record> {
@@ -99,6 +110,15 @@ pub struct PlayerRecord {
     pub username: String,
 }
 
+impl PlayerRecord {
+    pub fn new(user_id: String) -> Self {
+        PlayerRecord {
+            user_id,
+            ..Default::default()
+        }
+    }
+}
+
 #[derive(Debug, Default, Deserialize, Serialize)]
 pub struct GuildRecord {
     #[serde(flatten, skip_serializing)]
@@ -107,6 +127,15 @@ pub struct GuildRecord {
     pub server_id: String,
     pub afk_channel: String,
     pub graveyard: String,
+}
+
+impl GuildRecord {
+    pub fn new(server_id: String) -> Self {
+        GuildRecord {
+            server_id,
+            ..Default::default()
+        }
+    }
 }
 
 #[derive(Clone, Debug, Default, Deserialize)]
