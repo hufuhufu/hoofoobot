@@ -1,3 +1,4 @@
+use poise::serenity_prelude::{ChannelId, GuildId};
 use tokio::sync::{mpsc, oneshot};
 
 use crate::{
@@ -56,12 +57,35 @@ pub enum Command {
 }
 
 impl Command {
+    pub fn new_incr_score(member: GuildUser, delta: u64, resp_tx: Responder<ScoreRecord>) -> Self {
+        Self::IncrScore(IncrScoreParams {
+            member,
+            delta,
+            resp_tx,
+        })
+    }
+
+    pub fn new_settings(
+        guild_id: GuildId,
+        afk_channel: Option<ChannelId>,
+        graveyard: Option<ChannelId>,
+        resp_tx: Responder<GuildRecord>,
+    ) -> Self {
+        Self::Settings(SettingsParams {
+            guild_id,
+            afk_channel,
+            graveyard,
+            resp_tx,
+        })
+    }
+
     pub fn into_incr_score(self) -> Option<IncrScoreParams> {
         match self {
             Self::IncrScore(x) => Some(x),
             _ => None,
         }
     }
+
     pub fn into_settings(self) -> Option<SettingsParams> {
         match self {
             Self::Settings(x) => Some(x),
@@ -70,13 +94,18 @@ impl Command {
     }
 }
 
-struct IncrScoreParams {
+pub struct IncrScoreParams {
     member: GuildUser,
     delta: u64,
     resp_tx: Responder<ScoreRecord>,
 }
 
-struct SettingsParams {}
+pub struct SettingsParams {
+    guild_id: GuildId,
+    afk_channel: Option<ChannelId>,
+    graveyard: Option<ChannelId>,
+    resp_tx: Responder<GuildRecord>,
+}
 
 pub struct Manager {
     pub client: Client,
@@ -98,7 +127,8 @@ impl Manager {
 
 async fn command_handler(client: Client, cmd: Command) {
     match cmd {
-        Command::IncrScore { .. } => incr_score_handler(client, cmd).await,
+        Command::IncrScore(_) => incr_score_handler(client, cmd).await,
+        Command::Settings(_) => settings_handler(client, cmd).await,
         _ => {}
     };
 }
@@ -191,4 +221,54 @@ async fn incr_score_handler(client: Client, cmd: Command) {
             let _ = resp_tx.send(Ok(record));
         }
     });
+}
+
+async fn settings_handler(client: Client, cmd: Command) {
+    let SettingsParams {
+        guild_id,
+        afk_channel,
+        graveyard,
+        resp_tx,
+    } = cmd.into_settings().unwrap();
+
+    let filter = format!("server_id = \"{}\"", guild_id);
+
+    let res = client.list::<GuildRecord>("guilds", Some(&filter)).await;
+    let list_guild_res = unwrap_result_or_bails!(resp_tx, res);
+
+    do_list_or_bails!(resp_tx, list_guild_res, ListResponse, {
+        let mut guilds = list_guild_res.unwrap();
+        let afk_channel = afk_channel.as_ref().map(ChannelId::to_string);
+        let graveyard = graveyard.as_ref().map(ChannelId::to_string);
+
+        if !guilds.is_empty() {
+            let mut guild = guilds.pop().unwrap();
+
+            if let Some(ch) = afk_channel {
+                guild.afk_channel = ch;
+            }
+            if let Some(ch) = graveyard {
+                guild.graveyard = ch;
+            }
+
+            let res = client.update::<GuildRecord>(guild).await;
+            let record_res = unwrap_result_or_bails!(resp_tx, res);
+            let record = unwrap_record_or_bails!(resp_tx, record_res);
+
+            let _ = resp_tx.send(Ok(record));
+        } else {
+            let guild = GuildRecord {
+                server_id: guild_id.to_string(),
+                afk_channel: afk_channel.unwrap_or_default(),
+                graveyard: graveyard.unwrap_or_default(),
+                ..Default::default()
+            };
+
+            let res = client.create::<GuildRecord>("guilds", guild).await;
+            let record_res = unwrap_result_or_bails!(resp_tx, res);
+            let record = unwrap_record_or_bails!(resp_tx, record_res);
+
+            let _ = resp_tx.send(Ok(record));
+        };
+    })
 }

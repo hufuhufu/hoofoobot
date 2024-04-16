@@ -68,6 +68,7 @@ async fn serenity(#[shuttle_runtime::Secrets] secret_store: SecretStore) -> Shut
             commands::rank(),
             commands::gtfo(),
             commands::voice_state(),
+            commands::settings(),
         ],
         prefix_options: poise::PrefixFrameworkOptions {
             prefix: Some("f:".into()),
