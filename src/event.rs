@@ -10,7 +10,7 @@ use tracing::{info, warn};
 
 use crate::{
     config::Configs,
-    pocketbase,
+    pocketbase as pb,
     score::{GuildUser, Scores},
     Data, Error,
 };
@@ -141,14 +141,17 @@ async fn go_out(data: &Data, guild_id: GuildId, user_id: UserId, now: Instant) -
         cache.rem_scores(guild_id);
     }
 
+    // Old db
     Scores::incr_score(data.db.clone(), guild_user, duration.as_secs()).await?;
+
+    // New db
     let (tx, rx) = oneshot::channel();
     data.tx
-        .send(pocketbase::Command::IncrScore {
-            member: guild_user,
-            delta: duration.as_secs(),
-            resp_tx: tx,
-        })
+        .send(pb::Command::new_incr_score(
+            guild_user,
+            duration.as_secs(),
+            tx,
+        ))
         .await?;
     let _ = rx.await??;
 

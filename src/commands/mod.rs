@@ -9,10 +9,13 @@ macro_rules! re_export {
 re_export!(graveyard);
 re_export!(hello);
 re_export!(rank);
-re_export!(register);
 re_export!(set_afk_channel);
+
+// Admins only commands
+re_export!(settings);
 
 // Owners only commands
 re_export!(gtfo);
 re_export!(incr_score);
 re_export!(voice_state);
+re_export!(register);
