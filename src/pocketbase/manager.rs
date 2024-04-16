@@ -49,13 +49,34 @@ macro_rules! unwrap_record_or_bails {
     };
 }
 
+#[non_exhaustive]
 pub enum Command {
-    IncrScore {
-        member: GuildUser,
-        delta: u64,
-        resp_tx: Responder<ScoreRecord>,
-    },
+    IncrScore(IncrScoreParams),
+    Settings(SettingsParams),
 }
+
+impl Command {
+    pub fn into_incr_score(self) -> Option<IncrScoreParams> {
+        match self {
+            Self::IncrScore(x) => Some(x),
+            _ => None,
+        }
+    }
+    pub fn into_settings(self) -> Option<SettingsParams> {
+        match self {
+            Self::Settings(x) => Some(x),
+            _ => None,
+        }
+    }
+}
+
+struct IncrScoreParams {
+    member: GuildUser,
+    delta: u64,
+    resp_tx: Responder<ScoreRecord>,
+}
+
+struct SettingsParams {}
 
 pub struct Manager {
     pub client: Client,
@@ -78,15 +99,16 @@ impl Manager {
 async fn command_handler(client: Client, cmd: Command) {
     match cmd {
         Command::IncrScore { .. } => incr_score_handler(client, cmd).await,
+        _ => {}
     };
 }
 
 async fn incr_score_handler(client: Client, cmd: Command) {
-    let Command::IncrScore {
+    let IncrScoreParams {
         member,
         delta,
         resp_tx,
-    } = cmd;
+    } = cmd.into_incr_score().unwrap();
 
     let filter = format!(
         "guild.server_id = \"{}\" && player.user_id = \"{}\"",
