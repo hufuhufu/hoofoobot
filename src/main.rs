@@ -50,10 +50,19 @@ mod user;
 
 #[shuttle_runtime::main]
 async fn serenity(#[shuttle_runtime::Secrets] secret_store: SecretStore) -> ShuttleSerenity {
-    // Get the discord token set in `Secrets.toml`
-    let discord_token = secret_store
-        .get("DISCORD_TOKEN")
-        .context("'DISCORD_TOKEN' was not found in Secrets.toml")?;
+    // Check if DEV envvar exist
+    let is_dev = std::env::var("DEV").unwrap_or_default();
+
+    // And get the appropriate discord token from `Secrets.toml`
+    let discord_token = if is_dev == "DEV" {
+        secret_store
+            .get("DEV_DISCORD_TOKEN")
+            .context("'DEV_DISCORD_TOKEN' was not found in Secrets.toml")?
+    } else {
+        secret_store
+            .get("DISCORD_TOKEN")
+            .context("'DISCORD_TOKEN' was not found in Secrets.toml")?
+    };
 
     let intents =
         serenity::GatewayIntents::non_privileged() | serenity::GatewayIntents::MESSAGE_CONTENT;
