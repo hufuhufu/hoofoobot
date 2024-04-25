@@ -1,7 +1,9 @@
+#![feature(lazy_cell)]
+
 use std::{
     collections::{HashMap, HashSet},
     str::FromStr,
-    sync::Arc,
+    sync::{Arc, LazyLock},
     time::{Duration, Instant},
 };
 
@@ -48,13 +50,15 @@ mod pocketbase;
 mod score;
 mod user;
 
+static IS_DEV: LazyLock<bool> = LazyLock::new(|| {
+    let is_dev = std::env::var("DEV").unwrap_or_default();
+    is_dev == "DEV"
+});
+
 #[shuttle_runtime::main]
 async fn serenity(#[shuttle_runtime::Secrets] secret_store: SecretStore) -> ShuttleSerenity {
-    // Check if DEV envvar exist
-    let is_dev = std::env::var("DEV").unwrap_or_default();
-
-    // And get the appropriate discord token from `Secrets.toml`
-    let discord_token = if is_dev == "DEV" {
+    // Get the appropriate discord token from `Secrets.toml`
+    let discord_token = if *IS_DEV {
         secret_store
             .get("DEV_DISCORD_TOKEN")
             .context("'DEV_DISCORD_TOKEN' was not found in Secrets.toml")?

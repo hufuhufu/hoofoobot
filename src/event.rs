@@ -11,7 +11,7 @@ use tracing::{info, warn};
 use crate::{
     config::Configs,
     pocketbase as pb,
-    score::{GuildUser, Scores},
+    score::{GuildUser, ScoreType, Scores},
     Data, Error,
 };
 
@@ -59,39 +59,43 @@ pub async fn event_handler(
             match old {
                 Some(old) => {
                     match (old.channel_id, new.channel_id) {
+                        // Match when a user go out from a voice channel, ie. the user disconnect
                         (Some(_), None) => {
                             if old.channel_id == afk_channel {
-                                // TODO: go_out_afk()
+                                go_out_afk(data, guild_id, user_id, now).await?;
                             } else {
-                                go_out(data, guild_id, user_id, now).await?;
+                                go_out_voice(data, guild_id, user_id, now).await?;
                             }
                         }
+
+                        // Match when a user move from one voice channel to another
                         (Some(_), Some(_)) => {
                             if old.channel_id == afk_channel {
-                                // TODO: go_out_afk()
-                                go_in(data, guild_id, user_id, now).await;
+                                // User move from AFK channel to a regular voice channel
+                                go_out_afk(data, guild_id, user_id, now).await?;
+                                go_in_voice(data, guild_id, user_id, now).await;
                             } else if new.channel_id == afk_channel {
-                                go_afk(data, guild_id, user_id, now).await?;
+                                // User move from a voice channel to AFK channel
+                                go_out_voice(data, guild_id, user_id, now).await?;
+                                go_in_afk(data, guild_id, user_id, now).await;
                             }
                         }
-                        _ => {
-                            warn!(?old, ?new, "Supposedly unreachable");
-                            return Ok(());
-                        }
+
+                        _ => warn!(?old, ?new, "Supposedly unreachable"),
                     }
                 }
-                None => {
-                    match new.channel_id {
-                        Some(_) => {
-                            if new.channel_id == afk_channel {
-                                // TODO: go_afk()
-                            } else {
-                                go_in(data, guild_id, user_id, now).await;
-                            }
+                None => match new.channel_id {
+                    // Match when a user go in to a voice channel
+                    Some(_) => {
+                        if new.channel_id == afk_channel {
+                            go_in_afk(data, guild_id, user_id, now).await;
+                        } else {
+                            go_in_voice(data, guild_id, user_id, now).await;
                         }
-                        None => warn!(?old, ?new, "Supposedly unreachable"),
                     }
-                }
+
+                    None => warn!(?old, ?new, "Supposedly unreachable"),
+                },
             }
         }
         _ => {}
@@ -100,7 +104,7 @@ pub async fn event_handler(
 }
 
 #[tracing::instrument(skip(data, now))]
-async fn go_in(data: &Data, guild_id: GuildId, user_id: UserId, now: Instant) {
+async fn go_in_voice(data: &Data, guild_id: GuildId, user_id: UserId, now: Instant) {
     {
         let mut voice_state = data.voice_state.lock().await;
         voice_state
@@ -112,15 +116,7 @@ async fn go_in(data: &Data, guild_id: GuildId, user_id: UserId, now: Instant) {
 }
 
 #[tracing::instrument(skip(data, now))]
-async fn go_afk(data: &Data, guild_id: GuildId, user_id: UserId, now: Instant) -> Result<()> {
-    // TODO: keep track of user afk time
-    info!("Went AFK");
-
-    go_out(data, guild_id, user_id, now).await
-}
-
-#[tracing::instrument(skip(data, now))]
-async fn go_out(data: &Data, guild_id: GuildId, user_id: UserId, now: Instant) -> Result<()> {
+async fn go_out_voice(data: &Data, guild_id: GuildId, user_id: UserId, now: Instant) -> Result<()> {
     let guild_user: GuildUser = (guild_id, user_id).into();
 
     let Some(Some(then)) = ({
@@ -137,6 +133,7 @@ async fn go_out(data: &Data, guild_id: GuildId, user_id: UserId, now: Instant) -
         voice_state.timestamps.insert(guild_user, None);
     }
     {
+        // Invalidate the cache, so that leaderboard doesn't show stale data.
         let mut cache = data.cache.lock().await;
         cache.rem_scores(guild_id);
     }
@@ -146,13 +143,8 @@ async fn go_out(data: &Data, guild_id: GuildId, user_id: UserId, now: Instant) -
 
     // New db
     let (tx, rx) = oneshot::channel();
-    data.tx
-        .send(pb::Command::new_incr_score(
-            guild_user,
-            duration.as_secs(),
-            tx,
-        ))
-        .await?;
+    let cmd = pb::Command::new_incr_score(guild_user, duration.as_secs(), tx, ScoreType::Voice);
+    data.tx.send(cmd).await?;
     let _ = rx.await??;
 
     let fmt_duration = humantime::format_duration(duration);
@@ -161,14 +153,75 @@ async fn go_out(data: &Data, guild_id: GuildId, user_id: UserId, now: Instant) -
     Ok(())
 }
 
-pub async fn go_out_and_in(
+#[tracing::instrument(skip(data, now))]
+async fn go_in_afk(data: &Data, guild_id: GuildId, user_id: UserId, now: Instant) {
+    {
+        let mut voice_state = data.voice_state.lock().await;
+        voice_state
+            .timestamps
+            .insert((guild_id, user_id).into(), Some(now));
+    }
+
+    info!("Went AFK");
+}
+
+#[tracing::instrument(skip(data, now))]
+async fn go_out_afk(data: &Data, guild_id: GuildId, user_id: UserId, now: Instant) -> Result<()> {
+    let guild_user: GuildUser = (guild_id, user_id).into();
+
+    let Some(Some(then)) = ({
+        let voice_state = data.voice_state.lock().await;
+        voice_state.timestamps.get(&guild_user).copied()
+    }) else {
+        info!("Left AFK after being there for god knows how long");
+        return Ok(());
+    };
+
+    let duration = now.duration_since(then);
+
+    {
+        let mut voice_state = data.voice_state.lock().await;
+        voice_state.timestamps.insert(guild_user, None);
+    }
+    {
+        // Invalidate the cache, so that leaderboard doesn't show stale data.
+        let mut cache = data.cache.lock().await;
+        cache.rem_scores(guild_id);
+    }
+
+    let (tx, rx) = oneshot::channel();
+    let cmd = pb::Command::new_incr_score(guild_user, duration.as_secs(), tx, ScoreType::Afk);
+    data.tx.send(cmd).await?;
+    let _ = rx.await??;
+
+    let fmt_duration = humantime::format_duration(duration);
+    info!("Left AFK after {fmt_duration}");
+
+    Ok(())
+}
+
+#[inline]
+pub async fn go_out_and_in_voice(
     data: &Data,
     guild_id: GuildId,
     user_id: UserId,
     now: Instant,
 ) -> Result<()> {
-    go_out(data, guild_id, user_id, now).await?;
-    go_in(data, guild_id, user_id, now).await;
+    go_out_voice(data, guild_id, user_id, now).await?;
+    go_in_voice(data, guild_id, user_id, now).await;
+
+    Ok(())
+}
+
+#[inline]
+pub async fn go_out_and_in_afk(
+    data: &Data,
+    guild_id: GuildId,
+    user_id: UserId,
+    now: Instant,
+) -> Result<()> {
+    go_out_afk(data, guild_id, user_id, now).await?;
+    go_in_afk(data, guild_id, user_id, now).await;
 
     Ok(())
 }
