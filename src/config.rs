@@ -60,6 +60,15 @@ pub struct Config {
     pub afk_channel: Option<ChannelId>,
 }
 
+impl Config {
+    pub fn new(graveyard: Option<u64>, afk_channel: Option<u64>) -> Self {
+        Config {
+            graveyard: graveyard.map(ChannelId::new),
+            afk_channel: afk_channel.map(ChannelId::new),
+        }
+    }
+}
+
 impl FromRedisValue for Config {
     fn from_redis_value(v: &redis::Value) -> redis::RedisResult<Self> {
         match *v {

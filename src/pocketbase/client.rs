@@ -8,6 +8,8 @@ use reqwest::{
 use serde::{Deserialize, Serialize};
 use serde_json::{json, Value};
 
+use super::records::{AdminRecord, Record};
+
 static APP_USER_AGENT: &str = concat!(env!("CARGO_PKG_NAME"), "/", env!("CARGO_PKG_VERSION"),);
 
 #[derive(Debug, Deserialize)]
@@ -66,7 +68,7 @@ pub enum AdminAuthResponse {
 
 #[derive(Debug, Deserialize)]
 pub struct ErrorResponse {
-    pub code: String,
+    pub code: u16,
     pub message: String,
     pub data: HashMap<String, Value>,
 }
@@ -82,98 +84,6 @@ impl core::fmt::Display for ErrorResponse {
         )
     }
 }
-
-#[derive(Clone, Debug, Deserialize)]
-pub struct AdminRecord {
-    #[serde(flatten)]
-    pub default: DefaultFields,
-    pub email: String,
-}
-
-#[derive(Debug, Default, Deserialize, Serialize)]
-pub struct ScoreRecord {
-    #[serde(flatten, skip_serializing)]
-    pub default: DefaultFields,
-
-    pub guild: String,
-    pub player: String,
-    pub voice_time: u64,
-    pub afk_time: u64,
-}
-
-#[derive(Debug, Default, Deserialize, Serialize)]
-pub struct PlayerRecord {
-    #[serde(flatten, skip_serializing)]
-    pub default: DefaultFields,
-
-    pub user_id: String,
-    pub username: String,
-}
-
-impl PlayerRecord {
-    pub fn new(user_id: String) -> Self {
-        PlayerRecord {
-            user_id,
-            ..Default::default()
-        }
-    }
-}
-
-#[derive(Debug, Default, Deserialize, Serialize)]
-pub struct GuildRecord {
-    #[serde(flatten, skip_serializing)]
-    pub default: DefaultFields,
-
-    pub server_id: String,
-    pub afk_channel: String,
-    pub graveyard: String,
-}
-
-impl GuildRecord {
-    pub fn new(server_id: String) -> Self {
-        GuildRecord {
-            server_id,
-            ..Default::default()
-        }
-    }
-}
-
-#[derive(Clone, Debug, Default, Deserialize)]
-#[serde(rename_all = "camelCase")]
-pub struct DefaultFields {
-    pub id: String,
-    pub created: String,
-    pub updated: String,
-
-    pub collection_id: Option<String>,
-    pub collection_name: Option<String>,
-}
-
-pub trait Record {
-    fn collection_name(&self) -> &str;
-    fn id(&self) -> &str;
-}
-
-macro_rules! impl_record {
-    ($rec:ident) => {
-        impl Record for $rec {
-            fn collection_name(&self) -> &str {
-                self.default
-                    .collection_name
-                    .as_ref()
-                    .map(|x| x.as_str())
-                    .unwrap_or_default()
-            }
-            fn id(&self) -> &str {
-                self.default.id.as_str()
-            }
-        }
-    };
-}
-
-impl_record!(GuildRecord);
-impl_record!(PlayerRecord);
-impl_record!(ScoreRecord);
 
 #[derive(Clone, Debug)]
 pub struct Client {
@@ -223,10 +133,9 @@ impl Client {
 
     pub async fn list<R: for<'de> Deserialize<'de> + Record>(
         &self,
-        collection: &str,
         filter: Option<&str>,
     ) -> anyhow::Result<ListResponse<R>> {
-        let url_path = format!("/api/collections/{collection}/records");
+        let url_path = format!("/api/collections/{}/records", R::collection_name());
         let url = self.pb_url.join(&url_path)?;
 
         let req = self.reqwest_client.get(url.as_str());
@@ -242,10 +151,9 @@ impl Client {
 
     pub async fn view<R: for<'de> Deserialize<'de> + Serialize + Record>(
         &self,
-        collection: &str,
         id: &str,
     ) -> anyhow::Result<CVUResponse<R>> {
-        let url_path = format!("/api/collections/{collection}/records/{id}");
+        let url_path = format!("/api/collections/{}/records/{}", R::collection_name(), id);
         let url = self.pb_url.join(&url_path)?;
 
         let req = self.reqwest_client.get(url);
@@ -256,10 +164,9 @@ impl Client {
 
     pub async fn create<R: for<'de> Deserialize<'de> + Serialize + Record>(
         &self,
-        collection_name: &str,
         record: R,
     ) -> anyhow::Result<CVUResponse<R>> {
-        let url_path = format!("/api/collections/{}/records", collection_name);
+        let url_path = format!("/api/collections/{}/records", R::collection_name());
         let url = self.pb_url.join(&url_path)?;
 
         let req = self.reqwest_client.post(url).json::<R>(&record);
@@ -274,7 +181,7 @@ impl Client {
     ) -> anyhow::Result<CVUResponse<R>> {
         let url_path = format!(
             "/api/collections/{}/records/{}",
-            record.collection_name(),
+            R::collection_name(),
             record.id()
         );
         let url = self.pb_url.join(&url_path)?;

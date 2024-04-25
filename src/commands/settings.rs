@@ -47,7 +47,7 @@ pub async fn set_graveyard(
 
                     let (resp_tx, resp_rx) = oneshot::channel();
                     let tx = ctx.data().tx.clone();
-                    tx.send(pb::Command::new_settings(
+                    tx.send(pb::Command::new_set_config(
                         guild_id,
                         None,
                         Some(cat.id),
@@ -109,7 +109,7 @@ pub async fn set_afkchannel(
 
                     let (resp_tx, resp_rx) = oneshot::channel();
                     let tx = ctx.data().tx.clone();
-                    tx.send(pb::Command::new_settings(
+                    tx.send(pb::Command::new_set_config(
                         guild_id,
                         Some(ch.id),
                         None,

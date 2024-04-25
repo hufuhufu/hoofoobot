@@ -117,3 +117,8 @@ impl std::cmp::PartialEq<poise::serenity_prelude::Member> for GuildUser {
         self.0 == other.guild_id && self.1 == other.user.id
     }
 }
+
+pub enum ScoreType {
+    Voice,
+    Afk,
+}
