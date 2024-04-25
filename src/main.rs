@@ -1,9 +1,7 @@
-#![feature(lazy_cell)]
-
 use std::{
     collections::{HashMap, HashSet},
     str::FromStr,
-    sync::{Arc, LazyLock},
+    sync::Arc,
     time::{Duration, Instant},
 };
 
@@ -17,6 +15,7 @@ use cache::DataCache;
 use chrono::{DateTime, Utc};
 use commands::score_update;
 use database::Redis;
+use once_cell::sync::Lazy;
 use poise::serenity_prelude::{self as serenity, Cache, Http, UserId};
 use shuttle_runtime::SecretStore;
 use shuttle_serenity::ShuttleSerenity;
@@ -50,7 +49,7 @@ mod pocketbase;
 mod score;
 mod user;
 
-static IS_DEV: LazyLock<bool> = LazyLock::new(|| {
+static IS_DEV: Lazy<bool> = Lazy::new(|| {
     let is_dev = std::env::var("DEV").unwrap_or_default();
     is_dev == "DEV"
 });
