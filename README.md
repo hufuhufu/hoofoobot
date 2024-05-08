@@ -30,7 +30,7 @@ Here are some features that I might implement in the future
 ### Website
 - [ ] A web version of the leaderboard and profile
 ### RPG Game (?)
-- [ ] A game centered around staying in voice chat, something like [idlerpg](idlerpg.net), is really interesting to explore.
+- [ ] A game centered around staying in voice chat, something like [idlerpg](https://idlerpg.net/), is really interesting to explore.
 
 ## Contributing
 Much appreciated! You can create an issue if you have a feature request, bug report, or just tell me how much my codes sucks!
