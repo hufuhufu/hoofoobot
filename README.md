@@ -1,7 +1,7 @@
 # hoofoobot
 It's a discord bot that I made to learn more Rust and some of interesting techs and startups!
 
-Made with Poise + Serenity, designed run on Shuttle, and use Pocketbase to keep its data.
+Made with [Poise](https://github.com/serenity-rs/poise) + [Serenity](https://github.com/serenity-rs/serenity), designed to run on [Shuttle](https://www.shuttle.rs/), and use [Pocketbase](https://pocketbase.io/) to keep its data.
 
 ## A couple of features
 ### Voice time recorder
